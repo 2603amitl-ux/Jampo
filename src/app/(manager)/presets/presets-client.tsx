@@ -8,8 +8,10 @@ import PresetForm, { type PresetFormValues } from "./preset-form";
 
 export default function PresetsClient({
   initialPresets,
+  allCertifications,
 }: {
   initialPresets: ShiftPreset[];
+  allCertifications: string[];
 }) {
   const [presets, setPresets] = useState(initialPresets);
   const [addingForDay, setAddingForDay] = useState<number | null>(null);
@@ -73,6 +75,7 @@ export default function PresetsClient({
 
             {addingForDay === day && (
               <PresetForm
+                allCertifications={allCertifications}
                 onSubmit={(values) => handleAdd(day, values)}
                 onCancel={() => setAddingForDay(null)}
               />
@@ -88,6 +91,7 @@ export default function PresetsClient({
                   <PresetForm
                     key={preset.id}
                     preset={preset}
+                    allCertifications={allCertifications}
                     onSubmit={(values) => handleEdit(preset.id, values)}
                     onCancel={() => setEditingId(null)}
                   />

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { ALL_CERTIFICATIONS } from "@/lib/constants";
 import type { Certification, Employee } from "@/types/database";
 
 export interface EmployeeFormValues {
@@ -15,10 +14,12 @@ export interface EmployeeFormValues {
 
 export default function EmployeeForm({
   employee,
+  certifications: allCertifications,
   onSubmit,
   onCancel,
 }: {
   employee?: Employee;
+  certifications: Certification[];
   onSubmit: (values: EmployeeFormValues) => Promise<string | null>;
   onCancel: () => void;
 }) {
@@ -127,8 +128,8 @@ export default function EmployeeForm({
 
       <div className="mt-4">
         <span className="mb-1 block text-sm font-semibold text-text">הסמכות</span>
-        <div className="flex gap-4">
-          {ALL_CERTIFICATIONS.map((cert) => (
+        <div className="flex flex-wrap gap-4">
+          {allCertifications.map((cert) => (
             <label key={cert} className="flex items-center gap-1.5 text-sm">
               <input
                 type="checkbox"
@@ -139,6 +140,11 @@ export default function EmployeeForm({
               {cert}
             </label>
           ))}
+          {allCertifications.length === 0 && (
+            <span className="text-sm text-text-muted">
+              אין עדיין הסמכות מוגדרות — אפשר להוסיף במסך &quot;פריסט משמרות&quot;.
+            </span>
+          )}
         </div>
       </div>
 

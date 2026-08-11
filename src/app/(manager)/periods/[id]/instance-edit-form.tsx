@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { ALL_CERTIFICATIONS } from "@/lib/constants";
 import type { Certification } from "@/types/database";
 
 export interface InstanceEditValues {
@@ -11,10 +10,12 @@ export interface InstanceEditValues {
 
 export default function InstanceEditForm({
   initial,
+  allCertifications,
   onSubmit,
   onCancel,
 }: {
   initial: InstanceEditValues;
+  allCertifications: Certification[];
   onSubmit: (values: InstanceEditValues) => Promise<string | null>;
   onCancel: () => void;
 }) {
@@ -55,7 +56,7 @@ export default function InstanceEditForm({
         />
       </label>
       <div className="flex flex-col gap-1">
-        {ALL_CERTIFICATIONS.map((cert) => (
+        {allCertifications.map((cert) => (
           <label key={cert} className="flex items-center gap-1">
             <input
               type="checkbox"

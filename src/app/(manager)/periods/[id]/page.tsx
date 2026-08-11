@@ -55,10 +55,15 @@ export default async function PeriodDetailPage({
     .select("*")
     .eq("schedule_period_id", id);
 
+  const { data: certifications } = await supabase
+    .from("certifications")
+    .select("name")
+    .order("name", { ascending: true });
+
   return (
     <div>
       <h1 className="mb-1 text-2xl font-bold">
-        מחזור <DateText date={period.start_date} /> – <DateText date={period.end_date} />
+        מחזור <DateText date={period.end_date} /> – <DateText date={period.start_date} />
       </h1>
       <PeriodDetailClient
         period={period}
@@ -67,6 +72,7 @@ export default async function PeriodDetailPage({
         employees={employees ?? []}
         availability={availability ?? []}
         weeklyRequests={weeklyRequests ?? []}
+        allCertifications={(certifications ?? []).map((c) => c.name)}
       />
     </div>
   );

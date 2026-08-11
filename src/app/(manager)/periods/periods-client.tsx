@@ -88,7 +88,7 @@ export default function PeriodsClient({
             className="flex items-center justify-between rounded border border-border bg-surface p-4 hover:border-brand"
           >
             <span className="font-medium">
-              <DateText date={period.start_date} /> – <DateText date={period.end_date} />
+              <DateText date={period.end_date} /> – <DateText date={period.start_date} />
             </span>
             <span
               className={`rounded px-3 py-1 text-xs font-semibold ${STATUS_COLORS[period.status]}`}

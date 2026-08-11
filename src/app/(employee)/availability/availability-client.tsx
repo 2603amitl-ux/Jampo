@@ -127,7 +127,7 @@ export default function AvailabilityClient({
       </div>
 
       <div className="overflow-x-auto pb-2">
-        <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(7, minmax(150px, 1fr))" }}>
+        <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
           {dates.map((date) => {
             const dayName = DAY_NAMES[new Date(`${date}T00:00:00Z`).getUTCDay()];
             const dayInstances = instances

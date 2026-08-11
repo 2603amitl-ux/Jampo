@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireManager } from "@/lib/auth/require-manager";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ALL_CERTIFICATIONS } from "@/lib/constants";
 import { isUuid } from "@/lib/uuid";
-import type { Certification } from "@/types/database";
 
 export async function PATCH(
   request: Request,
@@ -27,8 +25,10 @@ export async function PATCH(
   if (typeof body.priority === "number") update.priority = body.priority;
   if (typeof body.active === "boolean") update.active = body.active;
   if (Array.isArray(body.certifications)) {
+    const { data: validCerts } = await admin.from("certifications").select("name");
+    const validCertNames = new Set((validCerts ?? []).map((c) => c.name));
     update.certifications = (body.certifications as string[]).filter((c) =>
-      ALL_CERTIFICATIONS.includes(c as Certification)
+      validCertNames.has(c)
     );
   }
 

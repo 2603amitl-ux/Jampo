@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { requireManager } from "@/lib/auth/require-manager";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { usernameToEmail } from "@/lib/auth/username";
-import { ALL_CERTIFICATIONS } from "@/lib/constants";
-import type { Certification } from "@/types/database";
 
 export async function POST(request: Request) {
   const manager = await requireManager();
@@ -19,10 +17,12 @@ export async function POST(request: Request) {
   const password = String(body.password ?? "");
   const email = String(body.email ?? "").trim() || null;
   const priority = Number(body.priority ?? 0);
-  const certifications: Certification[] = Array.isArray(body.certifications)
-    ? body.certifications.filter((c: string) =>
-        ALL_CERTIFICATIONS.includes(c as Certification)
-      )
+
+  const admin = createAdminClient();
+  const { data: validCerts } = await admin.from("certifications").select("name");
+  const validCertNames = new Set((validCerts ?? []).map((c) => c.name));
+  const certifications = Array.isArray(body.certifications)
+    ? body.certifications.filter((c: string) => validCertNames.has(c))
     : [];
 
   if (!full_name || !username || password.length < 6) {
@@ -37,8 +37,6 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-
-  const admin = createAdminClient();
 
   const { data: created, error: createError } = await admin.auth.admin.createUser({
     email: usernameToEmail(username),

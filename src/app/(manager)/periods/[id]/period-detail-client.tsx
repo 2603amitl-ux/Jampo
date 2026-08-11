@@ -15,6 +15,7 @@ import type {
 } from "@/types/database";
 import InstanceEditForm, { type InstanceEditValues } from "./instance-edit-form";
 import EventForm, { type EventFormValues } from "./event-form";
+import ScheduleSummaryTable from "./schedule-summary-table";
 
 export default function PeriodDetailClient({
   period,
@@ -23,6 +24,7 @@ export default function PeriodDetailClient({
   employees,
   availability,
   weeklyRequests,
+  allCertifications,
 }: {
   period: SchedulePeriod;
   initialInstances: ShiftInstance[];
@@ -30,6 +32,7 @@ export default function PeriodDetailClient({
   employees: Employee[];
   availability: Availability[];
   weeklyRequests: WeeklyShiftRequest[];
+  allCertifications: string[];
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -279,7 +282,7 @@ export default function PeriodDetailClient({
       {buildMessage && <p className="mb-4 text-sm text-text-muted">{buildMessage}</p>}
 
       <div className="overflow-x-auto pb-2">
-        <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(7, minmax(190px, 1fr))" }}>
+        <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
           {dates.map((date) => {
             const dayInstances = instances
               .filter((i) => i.date === date)
@@ -305,6 +308,7 @@ export default function PeriodDetailClient({
                               required_headcount: instance.required_headcount,
                               required_certifications: instance.required_certifications,
                             }}
+                            allCertifications={allCertifications}
                             onSubmit={(values) => handleEditInstance(instance.id, values)}
                             onCancel={() => setEditingId(null)}
                           />
@@ -461,6 +465,7 @@ export default function PeriodDetailClient({
                 {addingEventForDate === date ? (
                   <EventForm
                     date={date}
+                    allCertifications={allCertifications}
                     onSubmit={handleAddEvent}
                     onCancel={() => setAddingEventForDate(null)}
                   />
@@ -479,6 +484,16 @@ export default function PeriodDetailClient({
           })}
         </div>
       </div>
+
+      {(status === "generated" || status === "published") && (
+        <ScheduleSummaryTable
+          employees={employees}
+          instances={instances}
+          availability={availability}
+          weeklyRequests={weeklyRequests}
+          assignments={assignments}
+        />
+      )}
     </div>
   );
 }

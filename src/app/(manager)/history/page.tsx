@@ -23,7 +23,7 @@ export default async function HistoryPage() {
             className="flex items-center justify-between rounded border border-border bg-surface p-4 hover:border-brand"
           >
             <span className="font-medium">
-              <DateText date={period.start_date} /> – <DateText date={period.end_date} />
+              <DateText date={period.end_date} /> – <DateText date={period.start_date} />
             </span>
             <span className="rounded bg-success-bg px-3 py-1 text-xs font-semibold text-success">פורסם</span>
           </Link>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { ALL_CERTIFICATIONS } from "@/lib/constants";
 import type { Certification } from "@/types/database";
 
 export interface EventFormValues {
@@ -16,10 +15,12 @@ export interface EventFormValues {
 
 export default function EventForm({
   date,
+  allCertifications,
   onSubmit,
   onCancel,
 }: {
   date: string;
+  allCertifications: Certification[];
   onSubmit: (values: EventFormValues) => Promise<string | null>;
   onCancel: () => void;
 }) {
@@ -96,7 +97,7 @@ export default function EventForm({
         />
       </label>
       <div className="mb-1.5 flex flex-wrap gap-2">
-        {ALL_CERTIFICATIONS.map((cert) => (
+        {allCertifications.map((cert) => (
           <label key={cert} className="flex items-center gap-1">
             <input
               type="checkbox"

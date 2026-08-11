@@ -9,10 +9,18 @@ export default async function EmployeesPage() {
     .order("active", { ascending: false })
     .order("priority", { ascending: false });
 
+  const { data: certifications } = await supabase
+    .from("certifications")
+    .select("*")
+    .order("name", { ascending: true });
+
   return (
     <div>
       <h1 className="mb-6 text-2xl font-bold">ניהול עובדים</h1>
-      <EmployeesClient initialEmployees={employees ?? []} />
+      <EmployeesClient
+        initialEmployees={employees ?? []}
+        certifications={(certifications ?? []).map((c) => c.name)}
+      />
     </div>
   );
 }

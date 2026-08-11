@@ -3,7 +3,9 @@
 //   npx supabase gen types typescript --linked > src/types/database.ts
 
 export type EmployeeRole = "manager" | "employee";
-export type Certification = "כללי" | "באנג'י" | "טרקטורון";
+// Certifications are a manager-editable list (see the `certifications`
+// table), not a fixed set — any string the manager has added is valid.
+export type Certification = string;
 export type PeriodStatus = "draft" | "collecting" | "generated" | "published";
 export type AssignedBy = "algorithm" | "manager";
 
@@ -76,6 +78,12 @@ export interface Assignment {
   created_at: string;
 }
 
+export interface CertificationRow {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
 type Table<Row, Insert> = {
   Row: Row;
   Insert: Insert;
@@ -93,9 +101,13 @@ export interface Database {
       availability: Table<Availability, Partial<Availability>>;
       weekly_shift_requests: Table<WeeklyShiftRequest, Partial<WeeklyShiftRequest>>;
       assignments: Table<Assignment, Partial<Assignment>>;
+      certifications: Table<CertificationRow, Partial<CertificationRow> & Pick<CertificationRow, "name">>;
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      rename_certification: { Args: { old_name: string; new_name: string }; Returns: undefined };
+      delete_certification: { Args: { cert_name: string }; Returns: undefined };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

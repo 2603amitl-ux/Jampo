@@ -1,6 +1,4 @@
-import type { Certification, PeriodStatus } from "@/types/database";
-
-export const ALL_CERTIFICATIONS: Certification[] = ["כללי", "באנג'י", "טרקטורון"];
+import type { PeriodStatus } from "@/types/database";
 
 export const DAY_NAMES = [
   "ראשון",

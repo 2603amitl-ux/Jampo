@@ -6,8 +6,10 @@ import EmployeeForm, { type EmployeeFormValues } from "./employee-form";
 
 export default function EmployeesClient({
   initialEmployees,
+  certifications,
 }: {
   initialEmployees: Employee[];
+  certifications: string[];
 }) {
   const [employees, setEmployees] = useState(initialEmployees);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -97,7 +99,11 @@ export default function EmployeesClient({
       )}
 
       {showAddForm && (
-        <EmployeeForm onSubmit={handleAdd} onCancel={() => setShowAddForm(false)} />
+        <EmployeeForm
+          certifications={certifications}
+          onSubmit={handleAdd}
+          onCancel={() => setShowAddForm(false)}
+        />
       )}
 
       <div className="overflow-x-auto rounded border border-border bg-surface">
@@ -119,6 +125,7 @@ export default function EmployeesClient({
                   <td colSpan={6} className="p-4">
                     <EmployeeForm
                       employee={employee}
+                      certifications={certifications}
                       onSubmit={(values) => handleEdit(employee.id, values)}
                       onCancel={() => setEditingId(null)}
                     />

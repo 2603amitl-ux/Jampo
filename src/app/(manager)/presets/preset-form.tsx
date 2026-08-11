@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { ALL_CERTIFICATIONS } from "@/lib/constants";
 import type { Certification, ShiftPreset } from "@/types/database";
 
 export interface PresetFormValues {
@@ -14,10 +13,12 @@ export interface PresetFormValues {
 
 export default function PresetForm({
   preset,
+  allCertifications,
   onSubmit,
   onCancel,
 }: {
   preset?: ShiftPreset;
+  allCertifications: Certification[];
   onSubmit: (values: PresetFormValues) => Promise<string | null>;
   onCancel: () => void;
 }) {
@@ -113,8 +114,8 @@ export default function PresetForm({
 
       <div className="mt-3">
         <span className="mb-1 block text-xs font-semibold text-text-muted">הסמכות נדרשות</span>
-        <div className="flex gap-4">
-          {ALL_CERTIFICATIONS.map((cert) => (
+        <div className="flex flex-wrap gap-4">
+          {allCertifications.map((cert) => (
             <label key={cert} className="flex items-center gap-1.5 text-sm">
               <input
                 type="checkbox"

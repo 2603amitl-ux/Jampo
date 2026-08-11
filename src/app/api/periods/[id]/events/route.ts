@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isUuid } from "@/lib/uuid";
-import { ALL_CERTIFICATIONS } from "@/lib/constants";
-import type { Certification } from "@/types/database";
 
 // An "event" is a fully custom shift the manager adds by hand — its own
 // date/hours/headcount/certifications, independent of the preset. It's
@@ -29,10 +27,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const startTime = String(body.start_time ?? "");
   const endTime = String(body.end_time ?? "");
   const headcount = Number(body.required_headcount ?? 0);
-  const certifications: Certification[] = Array.isArray(body.required_certifications)
-    ? body.required_certifications.filter((c: string) =>
-        ALL_CERTIFICATIONS.includes(c as Certification)
-      )
+  const { data: validCerts } = await supabase.from("certifications").select("name");
+  const validCertNames = new Set((validCerts ?? []).map((c) => c.name));
+  const certifications = Array.isArray(body.required_certifications)
+    ? body.required_certifications.filter((c: string) => validCertNames.has(c))
     : [];
   const note = typeof body.note === "string" ? body.note.trim() || null : null;
 
