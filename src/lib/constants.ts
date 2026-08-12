@@ -16,3 +16,5 @@ export const PERIOD_STATUS_LABELS: Record<PeriodStatus, string> = {
   generated: "שובץ (טרם פורסם)",
   published: "פורסם",
 };
+
+export const UNAVAILABILITY_REASONS = ["חופשה / חו\"ל", "רפואי", "אחר"];

@@ -84,6 +84,16 @@ export interface CertificationRow {
   created_at: string;
 }
 
+export interface EmployeeUnavailability {
+  id: string;
+  employee_id: string;
+  start_date: string; // YYYY-MM-DD
+  end_date: string;
+  reason: string;
+  note: string | null;
+  created_at: string;
+}
+
 type Table<Row, Insert> = {
   Row: Row;
   Insert: Insert;
@@ -102,6 +112,10 @@ export interface Database {
       weekly_shift_requests: Table<WeeklyShiftRequest, Partial<WeeklyShiftRequest>>;
       assignments: Table<Assignment, Partial<Assignment>>;
       certifications: Table<CertificationRow, Partial<CertificationRow> & Pick<CertificationRow, "name">>;
+      employee_unavailability: Table<
+        EmployeeUnavailability,
+        Partial<EmployeeUnavailability> & Pick<EmployeeUnavailability, "employee_id" | "start_date" | "end_date" | "reason">
+      >;
     };
     Views: Record<string, never>;
     Functions: {

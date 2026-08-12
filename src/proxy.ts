@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const MANAGER_PATHS = ["/employees", "/presets", "/periods", "/history"];
+const MANAGER_PATHS = ["/employees", "/presets", "/periods", "/history", "/planning-ahead"];
 const PUBLIC_PATHS = ["/login"];
 
 export async function proxy(request: NextRequest) {

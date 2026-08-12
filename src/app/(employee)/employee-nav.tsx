@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 const LINKS = [
   { href: "/availability", label: "הגשת זמינות" },
   { href: "/my-schedule", label: "השיבוץ שלי" },
+  { href: "/future-unavailability", label: "תכנון קדימה" },
 ];
 
 export default function EmployeeNav() {

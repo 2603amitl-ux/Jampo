@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { DAY_NAMES } from "@/lib/constants";
 import { DateText } from "@/components/date-text";
+import MyScheduleClient from "./my-schedule-client";
 
 export default async function MySchedulePage() {
   const supabase = await createClient();
@@ -33,15 +33,39 @@ export default async function MySchedulePage() {
     .order("start_time", { ascending: true });
 
   const instanceIds = (instances ?? []).map((i) => i.id);
+  const safeInstanceIds = instanceIds.length > 0 ? instanceIds : ["00000000-0000-0000-0000-000000000000"];
 
-  const { data: myAssignments } = await supabase
-    .from("assignments")
-    .select("shift_instance_id")
-    .eq("employee_id", user!.id)
-    .in("shift_instance_id", instanceIds.length > 0 ? instanceIds : ["00000000-0000-0000-0000-000000000000"]);
+  // RLS now exposes every assignment/availability row for a published
+  // period's shifts to any logged-in employee (not just their own), so
+  // coworkers and swap candidates can be computed here.
+  const [{ data: allAssignments }, { data: allAvailability }, { data: employees }] = await Promise.all([
+    supabase.from("assignments").select("*").in("shift_instance_id", safeInstanceIds),
+    supabase.from("availability").select("*").in("shift_instance_id", safeInstanceIds).eq("is_available", true),
+    supabase.from("employees").select("id, full_name").eq("active", true),
+  ]);
 
-  const myShiftIds = new Set((myAssignments ?? []).map((a) => a.shift_instance_id));
+  const nameById = new Map((employees ?? []).map((e) => [e.id, e.full_name]));
+  const myShiftIds = new Set(
+    (allAssignments ?? []).filter((a) => a.employee_id === user!.id).map((a) => a.shift_instance_id)
+  );
   const myShifts = (instances ?? []).filter((i) => myShiftIds.has(i.id));
+
+  const shiftsWithExtras = myShifts.map((shift) => {
+    const assignedIds = new Set(
+      (allAssignments ?? []).filter((a) => a.shift_instance_id === shift.id).map((a) => a.employee_id)
+    );
+    const coworkers = [...assignedIds]
+      .filter((id) => id !== user!.id)
+      .map((id) => nameById.get(id))
+      .filter((name): name is string => Boolean(name));
+
+    const swapCandidates = (allAvailability ?? [])
+      .filter((a) => a.shift_instance_id === shift.id && !assignedIds.has(a.employee_id))
+      .map((a) => nameById.get(a.employee_id))
+      .filter((name): name is string => Boolean(name));
+
+    return { shift, coworkers, swapCandidates };
+  });
 
   return (
     <div>
@@ -52,26 +76,7 @@ export default async function MySchedulePage() {
       {myShifts.length === 0 ? (
         <p className="mt-4 text-text-muted">לא שובצת למשמרות במחזור הזה.</p>
       ) : (
-        <div className="mt-4 space-y-2">
-          {myShifts.map((shift) => (
-            <div
-              key={shift.id}
-              className="flex items-center justify-between rounded border border-border bg-surface p-4"
-            >
-              <div>
-                <div className="font-medium">
-                  יום {DAY_NAMES[new Date(`${shift.date}T00:00:00Z`).getUTCDay()]} · <DateText date={shift.date} />
-                </div>
-                <div className="text-sm text-text-muted">{shift.shift_name}</div>
-              </div>
-              <div className="text-sm text-text-muted">
-                <bdi dir="ltr">
-                  {shift.start_time.slice(0, 5)}–{shift.end_time.slice(0, 5)}
-                </bdi>
-              </div>
-            </div>
-          ))}
-        </div>
+        <MyScheduleClient shifts={shiftsWithExtras} />
       )}
     </div>
   );

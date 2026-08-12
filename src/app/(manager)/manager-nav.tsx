@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/presets", label: "פריסט משמרות" },
   { href: "/periods", label: "מחזורי תכנון" },
   { href: "/history", label: "היסטוריה" },
+  { href: "/planning-ahead", label: "תכנון קדימה" },
 ];
 
 export default function ManagerNav() {
