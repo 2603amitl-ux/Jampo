@@ -7,12 +7,16 @@ export default function ScheduleSummaryTable({
   availability,
   weeklyRequests,
   assignments,
+  selectedEmployeeId,
+  onSelectEmployee,
 }: {
   employees: Employee[];
   instances: ShiftInstance[];
   availability: Availability[];
   weeklyRequests: WeeklyShiftRequest[];
   assignments: Assignment[];
+  selectedEmployeeId?: string | null;
+  onSelectEmployee?: (employeeId: string) => void;
 }) {
   const instanceById = new Map(instances.map((i) => [i.id, i]));
 
@@ -50,6 +54,7 @@ export default function ScheduleSummaryTable({
   return (
     <div className="mt-6">
       <h2 className="mb-2 text-lg font-bold">סיכום לפי עובד</h2>
+      <p className="mb-2 text-xs text-text-muted">לחצ/י על שם עובד/ת כדי להבליט את המשמרות שלו/ה בלוח למעלה.</p>
       <div className="overflow-x-auto rounded border border-border bg-surface">
         <table className="w-full text-sm">
           <thead>
@@ -62,11 +67,14 @@ export default function ScheduleSummaryTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ employee, submitted, desired, received, missed, underServed }) => (
+            {rows.map(({ employee, submitted, desired, received, missed, underServed }) => {
+              const isSelected = selectedEmployeeId === employee.id;
+              return (
               <tr
                 key={employee.id}
-                className={`border-b border-border-soft last:border-0 ${
-                  underServed ? "bg-amber-bg" : ""
+                onClick={() => onSelectEmployee?.(employee.id)}
+                className={`cursor-pointer border-b border-border-soft last:border-0 ${
+                  isSelected ? "bg-brand-soft" : underServed ? "bg-amber-bg" : ""
                 }`}
               >
                 <td className="px-4 py-3.5">
@@ -88,7 +96,8 @@ export default function ScheduleSummaryTable({
                         .join(", ")}
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {rows.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-text-muted">

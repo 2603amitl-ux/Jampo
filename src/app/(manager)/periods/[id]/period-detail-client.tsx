@@ -45,6 +45,8 @@ export default function PeriodDetailClient({
   const [notifyMessage, setNotifyMessage] = useState<string | null>(null);
   const [buildMessage, setBuildMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [shownCollectingEventWarning, setShownCollectingEventWarning] = useState(false);
+  const [highlightedEmployeeId, setHighlightedEmployeeId] = useState<string | null>(null);
 
   const employeeById = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
   const availableSet = useMemo(
@@ -63,6 +65,19 @@ export default function PeriodDetailClient({
     for (const a of assignments) map.set(a.employee_id, (map.get(a.employee_id) ?? 0) + 1);
     return map;
   }, [assignments]);
+  // Assignments per employee in creation order — lets us blame quota overages
+  // on whichever specific assignment pushed them past "desired", instead of
+  // flagging every one of that employee's shifts for the whole week.
+  const sortedAssignmentsByEmployee = useMemo(() => {
+    const map = new Map<string, Assignment[]>();
+    for (const a of assignments) {
+      const list = map.get(a.employee_id) ?? [];
+      list.push(a);
+      map.set(a.employee_id, list);
+    }
+    for (const list of map.values()) list.sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return map;
+  }, [assignments]);
 
   const dates = Array.from(new Set(instances.map((i) => i.date))).sort();
 
@@ -75,6 +90,23 @@ export default function PeriodDetailClient({
     setBusy(false);
     if (!error) {
       setStatus("collecting");
+      router.refresh();
+    }
+  }
+
+  // Reopening only flips the status back to "collecting" — it never touches
+  // availability/weekly_shift_requests, so whatever employees already
+  // submitted stays marked and simply becomes editable again.
+  async function handleReopenForSubmission() {
+    setBusy(true);
+    const { error } = await supabase
+      .from("schedule_periods")
+      .update({ status: "collecting" })
+      .eq("id", period.id);
+    setBusy(false);
+    if (!error) {
+      setStatus("collecting");
+      setBuildMessage(null);
       router.refresh();
     }
   }
@@ -206,17 +238,23 @@ export default function PeriodDetailClient({
     return warnings.length > 0 ? warnings.join(" · ") : null;
   }
 
-  // Same idea, but for an assignment that already exists — "current" here
-  // already includes this assignment, so only flag a real quota breach
-  // (strictly over, not just at the limit).
-  function existingAssignmentWarning(shift: ShiftInstance, employeeId: string): string | null {
+  // Same idea, but for an assignment that already exists. Quota is attributed
+  // to a *specific* assignment (by creation order) rather than the employee's
+  // whole week, so only the shift(s) that actually pushed them over quota are
+  // flagged — not every shift they happen to be assigned that week.
+  function existingAssignmentWarning(
+    shift: ShiftInstance,
+    employeeId: string,
+    assignmentId: string
+  ): string | null {
     const warnings: string[] = [];
     if (!availableSet.has(`${employeeId}:${shift.id}`)) {
       warnings.push("לא סימנ/ה זמינות למשמרת זו");
     }
     const desired = desiredCountByEmployee.get(employeeId) ?? 0;
-    const current = assignedCountByEmployee.get(employeeId) ?? 0;
-    if (current > desired) {
+    const employeeAssignments = sortedAssignmentsByEmployee.get(employeeId) ?? [];
+    const index = employeeAssignments.findIndex((a) => a.id === assignmentId);
+    if (index >= desired) {
       warnings.push("חורג/ת ממכסת המשמרות שביקש/ה");
     }
     return warnings.length > 0 ? warnings.join(" · ") : null;
@@ -260,6 +298,13 @@ export default function PeriodDetailClient({
 
         {status === "generated" && (
           <>
+            <button
+              onClick={handleReopenForSubmission}
+              disabled={busy}
+              className="rounded bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand disabled:opacity-50"
+            >
+              פתיחה מחדש להגשה
+            </button>
             <button
               onClick={handleBuildSchedule}
               disabled={busy}
@@ -340,8 +385,10 @@ export default function PeriodDetailClient({
                         className={`rounded border px-2 py-1.5 text-right text-xs ${
                           instance.is_event
                             ? "border-amber-bg bg-amber-bg"
-                            : hasShortage && status !== "collecting" && status !== "draft"
-                              ? "border-danger-border bg-danger-bg"
+                            : status === "generated" || status === "published"
+                              ? hasShortage
+                                ? "border-danger-border bg-danger-bg"
+                                : "border-success bg-success-bg"
                               : "border-border-soft bg-bg"
                         }`}
                       >
@@ -395,15 +442,18 @@ export default function PeriodDetailClient({
                             )}
                             <div className="flex flex-wrap gap-1">
                               {shiftAssignments.map((a) => {
-                                const warning = existingAssignmentWarning(instance, a.employee_id);
+                                const warning = existingAssignmentWarning(instance, a.employee_id, a.id);
+                                const isHighlighted = highlightedEmployeeId === a.employee_id;
                                 return (
                                 <div
                                   key={a.id}
                                   title={warning ?? undefined}
                                   className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 ${
-                                    warning
-                                      ? "border-amber-bg bg-amber-bg"
-                                      : "border-border-soft bg-surface"
+                                    isHighlighted
+                                      ? "border-brand bg-brand-soft ring-2 ring-brand"
+                                      : warning
+                                        ? "border-amber-bg bg-amber-bg"
+                                        : "border-border-soft bg-surface"
                                   }`}
                                 >
                                   {warning && <span className="text-amber">⚠</span>}
@@ -472,7 +522,15 @@ export default function PeriodDetailClient({
                 ) : (
                   status !== "published" && (
                     <button
-                      onClick={() => setAddingEventForDate(date)}
+                      onClick={() => {
+                        if (status === "collecting" && !shownCollectingEventWarning) {
+                          setShownCollectingEventWarning(true);
+                          alert(
+                            "שימו לב: המחזור כבר פתוח להגשת זמינות. משמרת חדשה שתוסיפו לא תופיע אוטומטית אצל עובדים שכבר הגישו — כדאי לשלוח תזכורת נוספת אחרי ההוספה."
+                          );
+                        }
+                        setAddingEventForDate(date);
+                      }}
                       className="mt-1.5 w-full rounded border border-dashed border-border py-1 text-xs text-text-muted hover:border-brand hover:text-brand"
                     >
                       + אירוע
@@ -492,6 +550,10 @@ export default function PeriodDetailClient({
           availability={availability}
           weeklyRequests={weeklyRequests}
           assignments={assignments}
+          selectedEmployeeId={highlightedEmployeeId}
+          onSelectEmployee={(id) =>
+            setHighlightedEmployeeId((prev) => (prev === id ? null : id))
+          }
         />
       )}
     </div>
