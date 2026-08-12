@@ -345,22 +345,6 @@ export default function PeriodDetailClient({
 
                 <div className="space-y-1.5">
                   {dayInstances.map((instance) => {
-                    if (editingId === instance.id) {
-                      return (
-                        <div key={instance.id} className="rounded bg-bg p-1">
-                          <InstanceEditForm
-                            initial={{
-                              required_headcount: instance.required_headcount,
-                              required_certifications: instance.required_certifications,
-                            }}
-                            allCertifications={allCertifications}
-                            onSubmit={(values) => handleEditInstance(instance.id, values)}
-                            onCancel={() => setEditingId(null)}
-                          />
-                        </div>
-                      );
-                    }
-
                     const shiftAssignments = assignments.filter(
                       (a) => a.shift_instance_id === instance.id
                     );
@@ -505,6 +489,20 @@ export default function PeriodDetailClient({
                                 </button>
                               )
                             )}
+                          </div>
+                        )}
+
+                        {editingId === instance.id && (
+                          <div className="mt-1.5 border-t border-border-soft pt-1.5">
+                            <InstanceEditForm
+                              initial={{
+                                required_headcount: instance.required_headcount,
+                                required_certifications: instance.required_certifications,
+                              }}
+                              allCertifications={allCertifications}
+                              onSubmit={(values) => handleEditInstance(instance.id, values)}
+                              onCancel={() => setEditingId(null)}
+                            />
                           </div>
                         )}
                       </div>

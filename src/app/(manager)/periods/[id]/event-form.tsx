@@ -76,14 +76,14 @@ export default function EventForm({
           required
           value={startTime}
           onChange={(e) => setStartTime(e.target.value)}
-          className="w-full rounded border border-border px-1.5 py-1"
+          className="w-full min-w-0 rounded border border-border px-1.5 py-1"
         />
         <input
           type="time"
           required
           value={endTime}
           onChange={(e) => setEndTime(e.target.value)}
-          className="w-full rounded border border-border px-1.5 py-1"
+          className="w-full min-w-0 rounded border border-border px-1.5 py-1"
         />
       </div>
       <label className="mb-1.5 flex items-center gap-1.5">
