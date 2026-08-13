@@ -142,7 +142,7 @@ export default function EmployeeForm({
           ))}
           {allCertifications.length === 0 && (
             <span className="text-sm text-text-muted">
-              אין עדיין הסמכות מוגדרות — אפשר להוסיף במסך &quot;פריסט משמרות&quot;.
+              אין עדיין הסמכות מוגדרות — אפשר להוסיף במסך &quot;הגדרות&quot;.
             </span>
           )}
         </div>

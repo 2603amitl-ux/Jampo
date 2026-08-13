@@ -363,18 +363,23 @@ export default function PeriodDetailClient({
                       (e) => e.active && !shiftAssignments.some((a) => a.employee_id === e.id)
                     );
 
+                    const isBuilt = status === "generated" || status === "published";
+                    // Fill reflects staffing status the same way for every shift, event
+                    // or not — only the border marks a card as a non-standard event, so
+                    // it stands out without hiding whether it's actually covered.
+                    const fillClass = isBuilt ? (hasShortage ? "bg-danger-bg" : "bg-success-bg") : "bg-bg";
+                    const borderClass = instance.is_event
+                      ? "border-amber"
+                      : isBuilt
+                        ? hasShortage
+                          ? "border-danger-border"
+                          : "border-success"
+                        : "border-border-soft";
+
                     return (
                       <div
                         key={instance.id}
-                        className={`rounded border px-2 py-1.5 text-right text-xs ${
-                          instance.is_event
-                            ? "border-amber-bg bg-amber-bg"
-                            : status === "generated" || status === "published"
-                              ? hasShortage
-                                ? "border-danger-border bg-danger-bg"
-                                : "border-success bg-success-bg"
-                              : "border-border-soft bg-bg"
-                        }`}
+                        className={`rounded border px-2 py-1.5 text-right text-xs ${borderClass} ${fillClass}`}
                       >
                         {(() => {
                           const canEditShift = status === "draft" || status === "collecting";
@@ -432,7 +437,12 @@ export default function PeriodDetailClient({
                                 <div
                                   key={a.id}
                                   title={warning ?? undefined}
-                                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 ${
+                                  onClick={() =>
+                                    setHighlightedEmployeeId((prev) =>
+                                      prev === a.employee_id ? null : a.employee_id
+                                    )
+                                  }
+                                  className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-1 ${
                                     isHighlighted
                                       ? "border-brand bg-brand-soft ring-2 ring-brand"
                                       : warning
@@ -444,7 +454,10 @@ export default function PeriodDetailClient({
                                   <span>{employeeById.get(a.employee_id)?.full_name ?? "?"}</span>
                                   {status !== "published" && (
                                     <button
-                                      onClick={() => handleRemoveAssignment(a.id)}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemoveAssignment(a.id);
+                                      }}
                                       className="text-danger"
                                     >
                                       הסרה

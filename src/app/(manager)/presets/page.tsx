@@ -20,7 +20,7 @@ export default async function PresetsPage() {
 
   return (
     <div>
-      <h1 className="mb-1 text-2xl font-bold">פריסט משמרות</h1>
+      <h1 className="mb-1 text-2xl font-bold">הגדרות</h1>
       <p className="mb-6 text-sm text-text-muted">
         התבנית הקבועה שממנה נבנה כל מחזור תכנון חדש — לפי יום בשבוע.
       </p>

@@ -52,7 +52,7 @@ export async function POST(request: Request) {
   let calendarMessage: string | null = null;
 
   if (!settings?.ical_url) {
-    calendarMessage = 'טרם הוגדר יומן Google לייבוא אוטומטי — אפשר להגדיר בעמוד "פריסט משמרות".';
+    calendarMessage = 'טרם הוגדר יומן Google לייבוא אוטומטי — אפשר להגדיר בעמוד "הגדרות".';
   } else {
     const result = await syncCalendarEvents(settings.ical_url, period.id, startDate, period.end_date);
     calendarInstances = result.instances;

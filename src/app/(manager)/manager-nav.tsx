@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 
 const LINKS = [
   { href: "/employees", label: "עובדים" },
-  { href: "/presets", label: "פריסט משמרות" },
+  { href: "/presets", label: "הגדרות" },
   { href: "/periods", label: "מחזורי תכנון" },
   { href: "/history", label: "היסטוריה" },
   { href: "/planning-ahead", label: "תכנון קדימה" },
