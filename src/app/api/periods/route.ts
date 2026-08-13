@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateShiftInstances, periodEndDate } from "@/lib/scheduling/generate-instances";
+import { syncCalendarEvents } from "@/lib/calendar-sync";
+import type { GeneratedShiftInstance } from "@/lib/scheduling/generate-instances";
 
 // Runs with the caller's own session (RLS-protected), not the admin client —
 // creating a period and generating its shifts only needs the manager
@@ -42,12 +44,36 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "שגיאה ביצירת המחזור" }, { status: 400 });
   }
 
-  const instances = generateShiftInstances(presets, period.id, startDate);
-  const { error: instancesError } = await supabase.from("shift_instances").insert(instances);
+  const presetInstances = generateShiftInstances(presets, period.id, startDate);
+
+  const { data: settings } = await supabase.from("calendar_settings").select("*").maybeSingle();
+
+  let calendarInstances: GeneratedShiftInstance[] = [];
+  let calendarMessage: string | null = null;
+
+  if (!settings?.ical_url) {
+    calendarMessage = 'טרם הוגדר יומן Google לייבוא אוטומטי — אפשר להגדיר בעמוד "פריסט משמרות".';
+  } else {
+    const result = await syncCalendarEvents(settings.ical_url, period.id, startDate, period.end_date);
+    calendarInstances = result.instances;
+    if (result.fetchError) {
+      calendarMessage = `לא ניתן היה לייבא אירועים מהיומן: ${result.fetchError}. אפשר להוסיף אותם ידנית.`;
+    } else if (result.importedCount > 0) {
+      calendarMessage =
+        `${result.importedCount} אירועים יובאו מהיומן` +
+        (result.defaultedAllDayCount > 0
+          ? ` (${result.defaultedAllDayCount} מהם ללא שעה מוגדרת — נקבעו כ-09:00–17:00, כדאי לבדוק).`
+          : ".");
+    }
+  }
+
+  const { error: instancesError } = await supabase
+    .from("shift_instances")
+    .insert([...presetInstances, ...calendarInstances]);
   if (instancesError) {
     await supabase.from("schedule_periods").delete().eq("id", period.id);
     return NextResponse.json({ error: "שגיאה ביצירת המשמרות" }, { status: 400 });
   }
 
-  return NextResponse.json({ id: period.id }, { status: 201 });
+  return NextResponse.json({ id: period.id, calendarMessage }, { status: 201 });
 }

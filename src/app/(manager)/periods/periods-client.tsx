@@ -49,6 +49,7 @@ export default function PeriodsClient({
       setError(body.error ?? "שגיאה");
       return;
     }
+    if (body.calendarMessage) alert(body.calendarMessage);
     router.push(`/periods/${body.id}`);
   }
 

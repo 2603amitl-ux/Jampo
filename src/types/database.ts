@@ -94,6 +94,12 @@ export interface EmployeeUnavailability {
   created_at: string;
 }
 
+export interface CalendarSettings {
+  id: string;
+  ical_url: string | null;
+  updated_at: string;
+}
+
 type Table<Row, Insert> = {
   Row: Row;
   Insert: Insert;
@@ -116,6 +122,7 @@ export interface Database {
         EmployeeUnavailability,
         Partial<EmployeeUnavailability> & Pick<EmployeeUnavailability, "employee_id" | "start_date" | "end_date" | "reason">
       >;
+      calendar_settings: Table<CalendarSettings, Partial<CalendarSettings>>;
     };
     Views: Record<string, never>;
     Functions: {
