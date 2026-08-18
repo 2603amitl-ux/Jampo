@@ -5,6 +5,7 @@ import type {
   ShiftInstance,
   WeeklyShiftRequest,
 } from "@/types/database";
+import { isTrained } from "@/lib/constants";
 
 export interface GeneratedAssignment {
   shift_instance_id: string;
@@ -59,10 +60,18 @@ export function generateSchedule(params: {
 }): ScheduleResult {
   const { availability, weeklyRequests, employees } = params;
 
-  const activeEmployeeIds = new Set(employees.filter((e) => e.active).map((e) => e.id));
+  const employeeById = new Map(employees.map((e) => [e.id, e]));
+
+  // Only trained (has the base certification) + active employees compete
+  // for a shift's required headcount/certifications — an employee still
+  // working toward that certification never fills a real slot (see the
+  // bonus pass at the end, which adds them as supplementary help instead).
+  const trainedActiveEmployeeIds = new Set(
+    employees.filter((e) => e.active && isTrained(e)).map((e) => e.id)
+  );
   const availableEmployeeIdsByShift = new Map<string, Set<string>>();
   for (const a of availability) {
-    if (!a.is_available || !activeEmployeeIds.has(a.employee_id)) continue;
+    if (!a.is_available || !trainedActiveEmployeeIds.has(a.employee_id)) continue;
     if (!availableEmployeeIdsByShift.has(a.shift_instance_id)) {
       availableEmployeeIdsByShift.set(a.shift_instance_id, new Set());
     }
@@ -78,7 +87,6 @@ export function generateSchedule(params: {
     return diff !== 0 ? diff : chronological(a, b);
   });
 
-  const employeeById = new Map(employees.map((e) => [e.id, e]));
   const desiredCountByEmployee = new Map(weeklyRequests.map((r) => [r.employee_id, r.desired_shift_count]));
 
   const availableSet = new Set(
@@ -88,9 +96,10 @@ export function generateSchedule(params: {
   const assignedCount = new Map<string, number>();
   // date -> employee_id -> shift time ranges already assigned that day
   const dailyAssignments = new Map<string, Map<string, { start: string; end: string }[]>>();
-  // shift_instance_id -> ids of employees assigned to it, kept across both
-  // passes so shortages can be computed once at the very end (after any
-  // reallocation into events has happened).
+  // shift_instance_id -> ids of employees counted toward its required
+  // headcount/certifications. Kept across passes 1-2 so shortages can be
+  // computed once at the very end. Bonus (in-training) assignments in pass
+  // 3 are deliberately NOT added here, so they never mask a real shortage.
   const assignedByShift = new Map<string, Set<string>>();
 
   const assignments: GeneratedAssignment[] = [];
@@ -115,6 +124,9 @@ export function generateSchedule(params: {
   // the actual (date, start, end) being filled — for a plain shift these
   // are the same shift; for the reallocation pass below they differ (a
   // regular shift's sign-ups are borrowed to cover an event's time slot).
+  // Only trained employees are ever eligible here — an in-training
+  // employee never counts toward a real headcount/certification slot,
+  // whether by direct sign-up or by borrowing.
   function eligibleCandidates(
     availabilityShiftId: string,
     excludeIds: Set<string>,
@@ -124,6 +136,7 @@ export function generateSchedule(params: {
   ): Employee[] {
     return employees.filter((emp) => {
       if (!emp.active) return false;
+      if (!isTrained(emp)) return false;
       if (excludeIds.has(emp.id)) return false;
       if (!availableSet.has(`${emp.id}:${availabilityShiftId}`)) return false;
       const desired = desiredCountByEmployee.get(emp.id) ?? 0;
@@ -226,9 +239,28 @@ export function generateSchedule(params: {
     );
   }
 
-  // Shortages are computed once at the end, after reallocation, so an
-  // event that got topped up from a shift's leftovers doesn't get
-  // reported as short.
+  // Pass 3: employees still working toward the base certification sign up
+  // like anyone else, and get added to any shift/event they're available
+  // for as supplementary help — they never compete for or fill a real
+  // slot (passes 1-2 only ever drew from trained employees), so adding
+  // them can't mask a shortage. Weekly quota and same-day overlap rules
+  // still apply normally.
+  for (const shift of shiftInstances) {
+    const countedSet = assignedByShift.get(shift.id)!;
+    for (const emp of employees) {
+      if (!emp.active || isTrained(emp)) continue;
+      if (countedSet.has(emp.id)) continue;
+      if (!availableSet.has(`${emp.id}:${shift.id}`)) continue;
+      const desired = desiredCountByEmployee.get(emp.id) ?? 0;
+      if ((assignedCount.get(emp.id) ?? 0) >= desired) continue;
+      if (hasOverlapOnDay(emp.id, shift.date, shift.start_time, shift.end_time)) continue;
+      recordAssignment(emp.id, shift);
+    }
+  }
+
+  // Shortages are computed once at the end, from `assignedByShift` only —
+  // reallocated (pass 2) people count, bonus in-training people (pass 3)
+  // never do.
   const shortages: Shortage[] = [];
   for (const shift of shiftInstances) {
     const assignedToThisShift = assignedByShift.get(shift.id)!;

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { DAY_NAMES, PERIOD_STATUS_LABELS } from "@/lib/constants";
+import { DAY_NAMES, PERIOD_STATUS_LABELS, isTrained } from "@/lib/constants";
 import { DateText } from "@/components/date-text";
 import type {
   Assignment,
@@ -348,13 +348,20 @@ export default function PeriodDetailClient({
                     const shiftAssignments = assignments.filter(
                       (a) => a.shift_instance_id === instance.id
                     );
+                    // Employees still in training (no base certification) are shown as
+                    // assigned but never count toward headcount/certification coverage —
+                    // they're supplementary, not a substitute for real staffing.
+                    const countedAssignments = shiftAssignments.filter((a) => {
+                      const emp = employeeById.get(a.employee_id);
+                      return emp ? isTrained(emp) : false;
+                    });
                     const missingHeadcount = Math.max(
                       0,
-                      instance.required_headcount - shiftAssignments.length
+                      instance.required_headcount - countedAssignments.length
                     );
                     const missingCerts = instance.required_certifications.filter(
                       (cert) =>
-                        !shiftAssignments.some((a) =>
+                        !countedAssignments.some((a) =>
                           employeeById.get(a.employee_id)?.certifications.includes(cert)
                         )
                     );
@@ -433,6 +440,8 @@ export default function PeriodDetailClient({
                               {shiftAssignments.map((a) => {
                                 const warning = existingAssignmentWarning(instance, a.employee_id, a.id);
                                 const isHighlighted = highlightedEmployeeId === a.employee_id;
+                                const assignee = employeeById.get(a.employee_id);
+                                const inTraining = assignee ? !isTrained(assignee) : false;
                                 return (
                                 <div
                                   key={a.id}
@@ -451,7 +460,8 @@ export default function PeriodDetailClient({
                                   }`}
                                 >
                                   {warning && <span className="text-amber">⚠</span>}
-                                  <span>{employeeById.get(a.employee_id)?.full_name ?? "?"}</span>
+                                  <span>{assignee?.full_name ?? "?"}</span>
+                                  {inTraining && <span className="text-text-muted">(בהכשרה)</span>}
                                   {status !== "published" && (
                                     <button
                                       onClick={(e) => {
@@ -489,6 +499,7 @@ export default function PeriodDetailClient({
                                   {availableEmployees.map((e) => (
                                     <option key={e.id} value={e.id}>
                                       {e.full_name}
+                                      {!isTrained(e) ? " (בהכשרה)" : ""}
                                       {assignmentWarning(instance, e.id) ? " ⚠" : ""}
                                     </option>
                                   ))}

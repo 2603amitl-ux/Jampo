@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Employee } from "@/types/database";
+import { isTrained } from "@/lib/constants";
 import EmployeeForm, { type EmployeeFormValues } from "./employee-form";
 
 export default function EmployeesClient({
@@ -143,13 +144,21 @@ export default function EmployeesClient({
                   <td className="px-4 py-3.5">{employee.certifications.join(", ") || "—"}</td>
                   <td className="px-4 py-3.5 tabular-nums">{employee.priority}</td>
                   <td className="px-4 py-3.5">
-                    <span
-                      className={`rounded px-3 py-1 text-xs font-semibold ${
-                        employee.active ? "bg-success-bg text-success" : "bg-border-soft text-text-muted"
-                      }`}
-                    >
-                      {employee.active ? "פעיל" : "מושבת"}
-                    </span>
+                    {employee.active ? (
+                      isTrained(employee) ? (
+                        <span className="rounded bg-success-bg px-3 py-1 text-xs font-semibold text-success">
+                          פעיל
+                        </span>
+                      ) : (
+                        <span className="rounded bg-amber-bg px-3 py-1 text-xs font-semibold text-amber">
+                          בהכשרה
+                        </span>
+                      )
+                    ) : (
+                      <span className="rounded bg-border-soft px-3 py-1 text-xs font-semibold text-text-muted">
+                        מושבת
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3.5">
                     <div className="flex gap-4">

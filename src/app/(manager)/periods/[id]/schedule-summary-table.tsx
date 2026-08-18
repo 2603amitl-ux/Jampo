@@ -1,4 +1,4 @@
-import { DAY_NAMES } from "@/lib/constants";
+import { DAY_NAMES, isTrained } from "@/lib/constants";
 import type { Assignment, Availability, Employee, ShiftInstance, WeeklyShiftRequest } from "@/types/database";
 
 export default function ScheduleSummaryTable({
@@ -79,6 +79,9 @@ export default function ScheduleSummaryTable({
               >
                 <td className="px-4 py-3.5">
                   {employee.full_name}
+                  {!isTrained(employee) && (
+                    <span className="mr-2 text-xs text-text-muted">(בהכשרה)</span>
+                  )}
                   {underServed && (
                     <span className="mr-2 rounded-full bg-amber px-2 py-0.5 text-xs font-semibold text-white">
                       כדאי לפנות אליו/ה
