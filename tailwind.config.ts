@@ -23,6 +23,7 @@ const config: Config = {
         success: {
           DEFAULT: "var(--success)",
           bg: "var(--success-bg)",
+          border: "var(--success-border)",
         },
         danger: {
           DEFAULT: "var(--danger)",

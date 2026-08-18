@@ -380,7 +380,7 @@ export default function PeriodDetailClient({
                       : isBuilt
                         ? hasShortage
                           ? "border-danger-border"
-                          : "border-success"
+                          : "border-success-border"
                         : "border-border-soft";
 
                     return (
