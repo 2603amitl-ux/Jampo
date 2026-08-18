@@ -26,6 +26,19 @@ function timeRangesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: s
   return aStart < bEnd && bStart < aEnd;
 }
 
+// An event is "nested" in a shift when its whole time range sits inside the
+// shift's — not just overlapping at an edge. Only this clean-containment
+// case is eligible for borrowing (see the reallocation pass below); a event
+// that starts before or runs past the shift is left alone.
+function isNestedInShift(event: ShiftInstance, shift: ShiftInstance): boolean {
+  return (
+    !shift.is_event &&
+    shift.date === event.date &&
+    shift.start_time <= event.start_time &&
+    event.end_time <= shift.end_time
+  );
+}
+
 // Shifts are processed most-constrained-first: whichever shift has the
 // fewest interested, active candidates goes first, so a "flexible" shift
 // with plenty of options doesn't get to a scarce candidate before a shift
@@ -75,9 +88,12 @@ export function generateSchedule(params: {
   const assignedCount = new Map<string, number>();
   // date -> employee_id -> shift time ranges already assigned that day
   const dailyAssignments = new Map<string, Map<string, { start: string; end: string }[]>>();
+  // shift_instance_id -> ids of employees assigned to it, kept across both
+  // passes so shortages can be computed once at the very end (after any
+  // reallocation into events has happened).
+  const assignedByShift = new Map<string, Set<string>>();
 
   const assignments: GeneratedAssignment[] = [];
-  const shortages: Shortage[] = [];
 
   function hasOverlapOnDay(employeeId: string, date: string, start: string, end: string): boolean {
     const ranges = dailyAssignments.get(date)?.get(employeeId) ?? [];
@@ -94,59 +110,132 @@ export function generateSchedule(params: {
     dayMap.get(employeeId)!.push({ start: shift.start_time, end: shift.end_time });
   }
 
-  for (const shift of shiftInstances) {
-    const assignedToThisShift = new Set<string>();
+  // Availability is checked against `availabilityShiftId` (the shift whose
+  // sign-up list to draw from), while the overlap/day check runs against
+  // the actual (date, start, end) being filled — for a plain shift these
+  // are the same shift; for the reallocation pass below they differ (a
+  // regular shift's sign-ups are borrowed to cover an event's time slot).
+  function eligibleCandidates(
+    availabilityShiftId: string,
+    excludeIds: Set<string>,
+    date: string,
+    start: string,
+    end: string
+  ): Employee[] {
+    return employees.filter((emp) => {
+      if (!emp.active) return false;
+      if (excludeIds.has(emp.id)) return false;
+      if (!availableSet.has(`${emp.id}:${availabilityShiftId}`)) return false;
+      const desired = desiredCountByEmployee.get(emp.id) ?? 0;
+      if ((assignedCount.get(emp.id) ?? 0) >= desired) return false;
+      if (hasOverlapOnDay(emp.id, date, start, end)) return false;
+      return true;
+    });
+  }
 
-    function buildCandidatePool(): Employee[] {
-      return employees.filter((emp) => {
-        if (!emp.active) return false;
-        if (assignedToThisShift.has(emp.id)) return false;
-        if (!availableSet.has(`${emp.id}:${shift.id}`)) return false;
-        const desired = desiredCountByEmployee.get(emp.id) ?? 0;
-        if ((assignedCount.get(emp.id) ?? 0) >= desired) return false;
-        if (hasOverlapOnDay(emp.id, shift.date, shift.start_time, shift.end_time)) return false;
-        return true;
-      });
-    }
+  function byPriorityDesc(a: Employee, b: Employee) {
+    return b.priority - a.priority;
+  }
+  function byPriorityAsc(a: Employee, b: Employee) {
+    return a.priority - b.priority;
+  }
 
-    function byPriorityDesc(a: Employee, b: Employee) {
-      return b.priority - a.priority;
-    }
-
-    // 1. Cover every required certification first.
-    for (const cert of shift.required_certifications) {
-      const alreadyCovered = Array.from(assignedToThisShift).some((id) =>
+  // Fills a shift/event's required certifications first, then remaining
+  // headcount, pulling from whatever pool `getCandidates` returns (re-run
+  // on every pick since assignedSet/assignedCount change as we go).
+  function fillFrom(
+    target: ShiftInstance,
+    assignedSet: Set<string>,
+    getCandidates: () => Employee[],
+    priorityOrder: (a: Employee, b: Employee) => number
+  ) {
+    for (const cert of target.required_certifications) {
+      const alreadyCovered = Array.from(assignedSet).some((id) =>
         employeeById.get(id)?.certifications.includes(cert)
       );
       if (alreadyCovered) continue;
 
-      const candidates = buildCandidatePool()
+      const candidates = getCandidates()
         .filter((emp) => emp.certifications.includes(cert))
-        .sort(byPriorityDesc);
-
+        .sort(priorityOrder);
       if (candidates.length > 0) {
         const chosen = candidates[0];
-        assignedToThisShift.add(chosen.id);
-        recordAssignment(chosen.id, shift);
+        assignedSet.add(chosen.id);
+        recordAssignment(chosen.id, target);
       }
     }
 
-    // 2. Fill remaining headcount by priority.
-    while (assignedToThisShift.size < shift.required_headcount) {
-      const candidates = buildCandidatePool().sort(byPriorityDesc);
+    while (assignedSet.size < target.required_headcount) {
+      const candidates = getCandidates().sort(priorityOrder);
       if (candidates.length === 0) break;
       const chosen = candidates[0];
-      assignedToThisShift.add(chosen.id);
-      recordAssignment(chosen.id, shift);
+      assignedSet.add(chosen.id);
+      recordAssignment(chosen.id, target);
     }
+  }
 
-    // 3. Report any shortage.
+  // Pass 1: fill every shift and event from its own sign-up list.
+  for (const shift of shiftInstances) {
+    const assignedToThisShift = new Set<string>();
+    assignedByShift.set(shift.id, assignedToThisShift);
+    fillFrom(
+      shift,
+      assignedToThisShift,
+      () => eligibleCandidates(shift.id, assignedToThisShift, shift.date, shift.start_time, shift.end_time),
+      byPriorityDesc
+    );
+  }
+
+  // Pass 2: an event whose time is fully nested inside a regular shift can
+  // borrow that shift's "leftover" sign-ups — people who wanted the shift
+  // but didn't make the cut because it already reached headcount with
+  // higher-priority candidates. Nobody actually assigned to the shift is
+  // touched; only people who signed up but weren't selected are eligible,
+  // lowest priority first, since they weren't going to work the shift
+  // anyway. This only ever helps an event that's still short — it never
+  // reduces an already-full event.
+  for (const event of shiftInstances) {
+    if (!event.is_event) continue;
+    const assignedToEvent = assignedByShift.get(event.id)!;
+    const containingShifts = shiftInstances.filter((s) => isNestedInShift(event, s));
+    if (containingShifts.length === 0) continue;
+
+    fillFrom(
+      event,
+      assignedToEvent,
+      () => {
+        const seen = new Set<string>();
+        const pool: Employee[] = [];
+        for (const shift of containingShifts) {
+          for (const emp of eligibleCandidates(
+            shift.id,
+            assignedToEvent,
+            event.date,
+            event.start_time,
+            event.end_time
+          )) {
+            if (!seen.has(emp.id)) {
+              seen.add(emp.id);
+              pool.push(emp);
+            }
+          }
+        }
+        return pool;
+      },
+      byPriorityAsc
+    );
+  }
+
+  // Shortages are computed once at the end, after reallocation, so an
+  // event that got topped up from a shift's leftovers doesn't get
+  // reported as short.
+  const shortages: Shortage[] = [];
+  for (const shift of shiftInstances) {
+    const assignedToThisShift = assignedByShift.get(shift.id)!;
     const missingHeadcount = Math.max(0, shift.required_headcount - assignedToThisShift.size);
     const missingCertifications = shift.required_certifications.filter(
       (cert) =>
-        !Array.from(assignedToThisShift).some((id) =>
-          employeeById.get(id)?.certifications.includes(cert)
-        )
+        !Array.from(assignedToThisShift).some((id) => employeeById.get(id)?.certifications.includes(cert))
     );
     if (missingHeadcount > 0 || missingCertifications.length > 0) {
       shortages.push({
