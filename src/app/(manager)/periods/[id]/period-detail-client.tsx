@@ -80,6 +80,14 @@ export default function PeriodDetailClient({
   }, [assignments]);
 
   const dates = Array.from(new Set(instances.map((i) => i.date))).sort();
+  const isBuilt = status === "generated" || status === "published";
+
+  // Mobile-only day accordion — first day open by default, matching the
+  // desktop view where every day is always visible at once.
+  const [openDays, setOpenDays] = useState<Record<string, boolean>>({});
+  const isDayOpen = (date: string) => openDays[date] ?? date === dates[0];
+  const toggleDay = (date: string) =>
+    setOpenDays((prev) => ({ ...prev, [date]: !isDayOpen(date) }));
 
   async function handleOpenCollecting() {
     setBusy(true);
@@ -260,10 +268,223 @@ export default function PeriodDetailClient({
     return warnings.length > 0 ? warnings.join(" · ") : null;
   }
 
+  // Employees still in training (no base certification) are shown as
+  // assigned but never count toward headcount/certification coverage —
+  // they're supplementary, not a substitute for real staffing.
+  function shiftStatus(instance: ShiftInstance) {
+    const shiftAssignments = assignments.filter((a) => a.shift_instance_id === instance.id);
+    const countedAssignments = shiftAssignments.filter((a) => {
+      const emp = employeeById.get(a.employee_id);
+      return emp ? isTrained(emp) : false;
+    });
+    const missingHeadcount = Math.max(0, instance.required_headcount - countedAssignments.length);
+    const missingCerts = instance.required_certifications.filter(
+      (cert) => !countedAssignments.some((a) => employeeById.get(a.employee_id)?.certifications.includes(cert))
+    );
+    const hasShortage = missingHeadcount > 0 || missingCerts.length > 0;
+    const availableEmployees = employees.filter(
+      (e) => e.active && !shiftAssignments.some((a) => a.employee_id === e.id)
+    );
+    return { shiftAssignments, missingHeadcount, missingCerts, hasShortage, availableEmployees };
+  }
+
+  // Mobile day-header status dot: before a build exists there's no
+  // assignment data yet, so it reflects whether enough people have marked
+  // interest; once built it reflects the real (counted) shortage, same as
+  // the card's own fill color.
+  function shiftLooksCovered(instance: ShiftInstance): boolean {
+    if (isBuilt) return !shiftStatus(instance).hasShortage;
+    const interestedCount = employees.filter(
+      (e) => e.active && availableSet.has(`${e.id}:${instance.id}`)
+    ).length;
+    return interestedCount >= instance.required_headcount;
+  }
+
+  function renderShiftCard(instance: ShiftInstance) {
+    const { shiftAssignments, missingHeadcount, missingCerts, hasShortage, availableEmployees } =
+      shiftStatus(instance);
+
+    const fillClass = isBuilt ? (hasShortage ? "bg-danger-bg" : "bg-success-bg") : "bg-bg";
+    const borderClass = instance.is_event
+      ? "border-amber"
+      : isBuilt
+        ? hasShortage
+          ? "border-danger-border"
+          : "border-success-border"
+        : "border-border-soft";
+
+    return (
+      <div
+        key={instance.id}
+        className={`rounded border px-2 py-1.5 text-right text-xs ${borderClass} ${fillClass}`}
+      >
+        {(() => {
+          const canEditShift = status === "draft" || status === "collecting";
+          const Tag = canEditShift ? "button" : "div";
+          return (
+            <Tag
+              onClick={canEditShift ? () => setEditingId(instance.id) : undefined}
+              className="w-full text-right"
+            >
+              <div className="font-bold">{instance.shift_name}</div>
+              <div className="text-text-muted">
+                <bdi dir="ltr">
+                  {instance.start_time.slice(0, 5)}–{instance.end_time.slice(0, 5)}
+                </bdi>
+              </div>
+              <div className="text-text-muted">
+                {instance.required_headcount} עובדים
+                {instance.required_certifications.length > 0 &&
+                  ` · ${instance.required_certifications.join(", ")}`}
+              </div>
+              {instance.event_note && <div className="text-amber">{instance.event_note}</div>}
+            </Tag>
+          );
+        })()}
+
+        {status === "collecting" && (
+          <div className="mt-1.5 border-t border-border-soft pt-1.5">
+            {(() => {
+              const interested = employees.filter(
+                (e) => e.active && availableSet.has(`${e.id}:${instance.id}`)
+              );
+              return interested.length === 0 ? (
+                <div className="text-text-muted">אף אחד עדיין לא סימן</div>
+              ) : (
+                <div className="text-text-muted">
+                  {interested.length} מועמדים: {interested.map((e) => e.full_name).join(", ")}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {(status === "generated" || status === "published") && (
+          <div className="mt-1.5 border-t border-border-soft pt-1.5">
+            {shiftAssignments.length === 0 && <div className="text-text-muted">אין משובצים</div>}
+            <div className="flex flex-wrap gap-1">
+              {shiftAssignments.map((a) => {
+                const warning = existingAssignmentWarning(instance, a.employee_id, a.id);
+                const isHighlighted = highlightedEmployeeId === a.employee_id;
+                const assignee = employeeById.get(a.employee_id);
+                const inTraining = assignee ? !isTrained(assignee) : false;
+                return (
+                  <div
+                    key={a.id}
+                    title={warning ?? undefined}
+                    onClick={() =>
+                      setHighlightedEmployeeId((prev) => (prev === a.employee_id ? null : a.employee_id))
+                    }
+                    className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-1 ${
+                      isHighlighted
+                        ? "border-brand bg-brand-soft ring-2 ring-brand"
+                        : warning
+                          ? "border-amber-bg bg-amber-bg"
+                          : "border-border-soft bg-surface"
+                    }`}
+                  >
+                    {warning && <span className="text-amber">⚠</span>}
+                    <span>{assignee?.full_name ?? "?"}</span>
+                    {inTraining && <span className="text-text-muted">(בהכשרה)</span>}
+                    {status !== "published" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveAssignment(a.id);
+                        }}
+                        className="text-danger"
+                      >
+                        הסרה
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {hasShortage && (
+              <div className="mt-1 space-y-0.5 text-danger">
+                {missingHeadcount > 0 && <div>חסרים {missingHeadcount} עובדים</div>}
+                {missingCerts.length > 0 && <div>חסרה הסמכה: {missingCerts.join(", ")}</div>}
+              </div>
+            )}
+            {status === "generated" &&
+              (addingAssigneeFor === instance.id ? (
+                <select
+                  autoFocus
+                  onChange={(e) => {
+                    if (e.target.value) handleAddAssignment(instance, e.target.value);
+                  }}
+                  onBlur={() => setAddingAssigneeFor(null)}
+                  className="mt-1 w-full rounded border border-border px-1 py-0.5"
+                >
+                  <option value="">בחר/י עובד/ת</option>
+                  {availableEmployees.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.full_name}
+                      {!isTrained(e) ? " (בהכשרה)" : ""}
+                      {assignmentWarning(instance, e.id) ? " ⚠" : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <button onClick={() => setAddingAssigneeFor(instance.id)} className="mt-1 text-brand">
+                  + שיבוץ עובד/ת
+                </button>
+              ))}
+          </div>
+        )}
+
+        {editingId === instance.id && (
+          <div className="mt-1.5 border-t border-border-soft pt-1.5">
+            <InstanceEditForm
+              initial={{
+                required_headcount: instance.required_headcount,
+                required_certifications: instance.required_certifications,
+              }}
+              allCertifications={allCertifications}
+              onSubmit={(values) => handleEditInstance(instance.id, values)}
+              onCancel={() => setEditingId(null)}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderAddEventControl(date: string) {
+    if (addingEventForDate === date) {
+      return (
+        <EventForm
+          date={date}
+          allCertifications={allCertifications}
+          onSubmit={handleAddEvent}
+          onCancel={() => setAddingEventForDate(null)}
+        />
+      );
+    }
+    if (status === "published") return null;
+    return (
+      <button
+        onClick={() => {
+          if (status === "collecting" && !shownCollectingEventWarning) {
+            setShownCollectingEventWarning(true);
+            alert(
+              "שימו לב: המחזור כבר פתוח להגשת זמינות. משמרת חדשה שתוסיפו לא תופיע אוטומטית אצל עובדים שכבר הגישו — כדאי לשלוח תזכורת נוספת אחרי ההוספה."
+            );
+          }
+          setAddingEventForDate(date);
+        }}
+        className="mt-1.5 w-full rounded border border-dashed border-border py-1 text-xs text-text-muted hover:border-brand hover:text-brand"
+      >
+        + אירוע
+      </button>
+    );
+  }
+
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <span className="rounded bg-border-soft px-3 py-1 text-sm font-semibold text-text-muted">
+      <div className="mb-4 flex flex-col flex-wrap items-stretch gap-2 md:flex-row md:items-center md:gap-3">
+        <span className="rounded bg-border-soft px-3 py-1 text-center text-sm font-semibold text-text-muted md:text-right">
           {PERIOD_STATUS_LABELS[status]}
         </span>
 
@@ -271,7 +492,7 @@ export default function PeriodDetailClient({
           <button
             onClick={handleOpenCollecting}
             disabled={busy}
-            className="rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50"
+            className="w-full rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50 md:w-auto"
           >
             פתיחה להגשת זמינות
           </button>
@@ -282,14 +503,14 @@ export default function PeriodDetailClient({
             <button
               onClick={handleNotify}
               disabled={busy}
-              className="rounded bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand disabled:opacity-50"
+              className="w-full rounded bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand disabled:opacity-50 md:w-auto"
             >
               שליחת תזכורת לעובדים
             </button>
             <button
               onClick={handleBuildSchedule}
               disabled={busy}
-              className="rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50"
+              className="w-full rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50 md:w-auto"
             >
               בניית הצעת שיבוץ
             </button>
@@ -301,21 +522,21 @@ export default function PeriodDetailClient({
             <button
               onClick={handleReopenForSubmission}
               disabled={busy}
-              className="rounded bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand disabled:opacity-50"
+              className="w-full rounded bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand disabled:opacity-50 md:w-auto"
             >
               פתיחה מחדש להגשה
             </button>
             <button
               onClick={handleBuildSchedule}
               disabled={busy}
-              className="rounded bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand disabled:opacity-50"
+              className="w-full rounded bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand disabled:opacity-50 md:w-auto"
             >
               בנה מחדש
             </button>
             <button
               onClick={handlePublish}
               disabled={busy}
-              className="rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50"
+              className="w-full rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50 md:w-auto"
             >
               פרסום ללוח
             </button>
@@ -326,7 +547,8 @@ export default function PeriodDetailClient({
       {notifyMessage && <p className="mb-2 text-sm text-text-muted">{notifyMessage}</p>}
       {buildMessage && <p className="mb-4 text-sm text-text-muted">{buildMessage}</p>}
 
-      <div className="overflow-x-auto pb-2">
+      {/* Desktop: 7-column grid, all days always visible */}
+      <div className="hidden overflow-x-auto pb-2 md:block">
         <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
           {dates.map((date) => {
             const dayInstances = instances
@@ -343,226 +565,59 @@ export default function PeriodDetailClient({
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  {dayInstances.map((instance) => {
-                    const shiftAssignments = assignments.filter(
-                      (a) => a.shift_instance_id === instance.id
-                    );
-                    // Employees still in training (no base certification) are shown as
-                    // assigned but never count toward headcount/certification coverage —
-                    // they're supplementary, not a substitute for real staffing.
-                    const countedAssignments = shiftAssignments.filter((a) => {
-                      const emp = employeeById.get(a.employee_id);
-                      return emp ? isTrained(emp) : false;
-                    });
-                    const missingHeadcount = Math.max(
-                      0,
-                      instance.required_headcount - countedAssignments.length
-                    );
-                    const missingCerts = instance.required_certifications.filter(
-                      (cert) =>
-                        !countedAssignments.some((a) =>
-                          employeeById.get(a.employee_id)?.certifications.includes(cert)
-                        )
-                    );
-                    const hasShortage = missingHeadcount > 0 || missingCerts.length > 0;
-                    const availableEmployees = employees.filter(
-                      (e) => e.active && !shiftAssignments.some((a) => a.employee_id === e.id)
-                    );
+                <div className="space-y-1.5">{dayInstances.map((instance) => renderShiftCard(instance))}</div>
 
-                    const isBuilt = status === "generated" || status === "published";
-                    // Fill reflects staffing status the same way for every shift, event
-                    // or not — only the border marks a card as a non-standard event, so
-                    // it stands out without hiding whether it's actually covered.
-                    const fillClass = isBuilt ? (hasShortage ? "bg-danger-bg" : "bg-success-bg") : "bg-bg";
-                    const borderClass = instance.is_event
-                      ? "border-amber"
-                      : isBuilt
-                        ? hasShortage
-                          ? "border-danger-border"
-                          : "border-success-border"
-                        : "border-border-soft";
-
-                    return (
-                      <div
-                        key={instance.id}
-                        className={`rounded border px-2 py-1.5 text-right text-xs ${borderClass} ${fillClass}`}
-                      >
-                        {(() => {
-                          const canEditShift = status === "draft" || status === "collecting";
-                          const Tag = canEditShift ? "button" : "div";
-                          return (
-                            <Tag
-                              onClick={canEditShift ? () => setEditingId(instance.id) : undefined}
-                              className="w-full text-right"
-                            >
-                              <div className="font-bold">{instance.shift_name}</div>
-                              <div className="text-text-muted">
-                                <bdi dir="ltr">
-                                  {instance.start_time.slice(0, 5)}–{instance.end_time.slice(0, 5)}
-                                </bdi>
-                              </div>
-                              <div className="text-text-muted">
-                                {instance.required_headcount} עובדים
-                                {instance.required_certifications.length > 0 &&
-                                  ` · ${instance.required_certifications.join(", ")}`}
-                              </div>
-                              {instance.event_note && (
-                                <div className="text-amber">{instance.event_note}</div>
-                              )}
-                            </Tag>
-                          );
-                        })()}
-
-                        {status === "collecting" && (
-                          <div className="mt-1.5 border-t border-border-soft pt-1.5">
-                            {(() => {
-                              const interested = employees.filter(
-                                (e) => e.active && availableSet.has(`${e.id}:${instance.id}`)
-                              );
-                              return interested.length === 0 ? (
-                                <div className="text-text-muted">אף אחד עדיין לא סימן</div>
-                              ) : (
-                                <div className="text-text-muted">
-                                  {interested.length} מועמדים: {interested.map((e) => e.full_name).join(", ")}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        )}
-
-                        {(status === "generated" || status === "published") && (
-                          <div className="mt-1.5 border-t border-border-soft pt-1.5">
-                            {shiftAssignments.length === 0 && (
-                              <div className="text-text-muted">אין משובצים</div>
-                            )}
-                            <div className="flex flex-wrap gap-1">
-                              {shiftAssignments.map((a) => {
-                                const warning = existingAssignmentWarning(instance, a.employee_id, a.id);
-                                const isHighlighted = highlightedEmployeeId === a.employee_id;
-                                const assignee = employeeById.get(a.employee_id);
-                                const inTraining = assignee ? !isTrained(assignee) : false;
-                                return (
-                                <div
-                                  key={a.id}
-                                  title={warning ?? undefined}
-                                  onClick={() =>
-                                    setHighlightedEmployeeId((prev) =>
-                                      prev === a.employee_id ? null : a.employee_id
-                                    )
-                                  }
-                                  className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-1 ${
-                                    isHighlighted
-                                      ? "border-brand bg-brand-soft ring-2 ring-brand"
-                                      : warning
-                                        ? "border-amber-bg bg-amber-bg"
-                                        : "border-border-soft bg-surface"
-                                  }`}
-                                >
-                                  {warning && <span className="text-amber">⚠</span>}
-                                  <span>{assignee?.full_name ?? "?"}</span>
-                                  {inTraining && <span className="text-text-muted">(בהכשרה)</span>}
-                                  {status !== "published" && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRemoveAssignment(a.id);
-                                      }}
-                                      className="text-danger"
-                                    >
-                                      הסרה
-                                    </button>
-                                  )}
-                                </div>
-                                );
-                              })}
-                            </div>
-                            {hasShortage && (
-                              <div className="mt-1 space-y-0.5 text-danger">
-                                {missingHeadcount > 0 && <div>חסרים {missingHeadcount} עובדים</div>}
-                                {missingCerts.length > 0 && (
-                                  <div>חסרה הסמכה: {missingCerts.join(", ")}</div>
-                                )}
-                              </div>
-                            )}
-                            {status === "generated" && (
-                              addingAssigneeFor === instance.id ? (
-                                <select
-                                  autoFocus
-                                  onChange={(e) => {
-                                    if (e.target.value) handleAddAssignment(instance, e.target.value);
-                                  }}
-                                  onBlur={() => setAddingAssigneeFor(null)}
-                                  className="mt-1 w-full rounded border border-border px-1 py-0.5"
-                                >
-                                  <option value="">בחר/י עובד/ת</option>
-                                  {availableEmployees.map((e) => (
-                                    <option key={e.id} value={e.id}>
-                                      {e.full_name}
-                                      {!isTrained(e) ? " (בהכשרה)" : ""}
-                                      {assignmentWarning(instance, e.id) ? " ⚠" : ""}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <button
-                                  onClick={() => setAddingAssigneeFor(instance.id)}
-                                  className="mt-1 text-brand"
-                                >
-                                  + שיבוץ עובד/ת
-                                </button>
-                              )
-                            )}
-                          </div>
-                        )}
-
-                        {editingId === instance.id && (
-                          <div className="mt-1.5 border-t border-border-soft pt-1.5">
-                            <InstanceEditForm
-                              initial={{
-                                required_headcount: instance.required_headcount,
-                                required_certifications: instance.required_certifications,
-                              }}
-                              allCertifications={allCertifications}
-                              onSubmit={(values) => handleEditInstance(instance.id, values)}
-                              onCancel={() => setEditingId(null)}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {addingEventForDate === date ? (
-                  <EventForm
-                    date={date}
-                    allCertifications={allCertifications}
-                    onSubmit={handleAddEvent}
-                    onCancel={() => setAddingEventForDate(null)}
-                  />
-                ) : (
-                  status !== "published" && (
-                    <button
-                      onClick={() => {
-                        if (status === "collecting" && !shownCollectingEventWarning) {
-                          setShownCollectingEventWarning(true);
-                          alert(
-                            "שימו לב: המחזור כבר פתוח להגשת זמינות. משמרת חדשה שתוסיפו לא תופיע אוטומטית אצל עובדים שכבר הגישו — כדאי לשלוח תזכורת נוספת אחרי ההוספה."
-                          );
-                        }
-                        setAddingEventForDate(date);
-                      }}
-                      className="mt-1.5 w-full rounded border border-dashed border-border py-1 text-xs text-text-muted hover:border-brand hover:text-brand"
-                    >
-                      + אירוע
-                    </button>
-                  )
-                )}
+                {renderAddEventControl(date)}
               </div>
             );
           })}
         </div>
+      </div>
+
+      {/* Mobile: per-day accordion with a status dot per shift */}
+      <div className="space-y-2 md:hidden">
+        {dates.map((date) => {
+          const dayInstances = instances
+            .filter((i) => i.date === date)
+            .sort((a, b) => a.start_time.localeCompare(b.start_time));
+          const dayName = DAY_NAMES[new Date(`${date}T00:00:00Z`).getUTCDay()];
+          const open = isDayOpen(date);
+
+          return (
+            <div key={date} className="overflow-hidden rounded border border-border bg-surface">
+              <button
+                type="button"
+                onClick={() => toggleDay(date)}
+                className="flex w-full items-center justify-between px-3 py-2.5"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">{dayName}</span>
+                  <span className="text-xs text-text-muted">
+                    <DateText date={date} />
+                  </span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  {dayInstances.map((instance) => (
+                    <span
+                      key={instance.id}
+                      title={instance.shift_name}
+                      className={`h-2 w-2 rounded-full ${
+                        shiftLooksCovered(instance) ? "bg-success" : "bg-danger"
+                      }`}
+                    />
+                  ))}
+                  <span className={`text-text-muted transition-transform ${open ? "rotate-180" : ""}`}>﹀</span>
+                </span>
+              </button>
+              {open && (
+                <div className="space-y-1.5 border-t border-border-soft p-2">
+                  {dayInstances.map((instance) => renderShiftCard(instance))}
+                  {renderAddEventControl(date)}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {(status === "generated" || status === "published") && (
@@ -573,9 +628,7 @@ export default function PeriodDetailClient({
           weeklyRequests={weeklyRequests}
           assignments={assignments}
           selectedEmployeeId={highlightedEmployeeId}
-          onSelectEmployee={(id) =>
-            setHighlightedEmployeeId((prev) => (prev === id ? null : id))
-          }
+          onSelectEmployee={(id) => setHighlightedEmployeeId((prev) => (prev === id ? null : id))}
         />
       )}
     </div>

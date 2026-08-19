@@ -41,6 +41,14 @@ export default function AvailabilityClient({
   const [justSubmitted, setJustSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const dates = Array.from(new Set(instances.map((i) => i.date))).sort();
+  // Mobile-only day accordion — first day open by default, matching the
+  // desktop view where every day is always visible at once.
+  const [openDays, setOpenDays] = useState<Record<string, boolean>>({});
+  const isDayOpen = (date: string) => openDays[date] ?? date === dates[0];
+  const toggleDay = (date: string) =>
+    setOpenDays((prev) => ({ ...prev, [date]: !isDayOpen(date) }));
+
   const isDirty = useMemo(() => {
     if (desiredCount !== savedDesiredCount) return true;
     const ids = new Set([...Object.keys(wanted), ...Object.keys(savedWanted)]);
@@ -49,6 +57,8 @@ export default function AvailabilityClient({
     }
     return false;
   }, [wanted, savedWanted, desiredCount, savedDesiredCount]);
+
+  const totalSelected = Object.keys(wanted).length;
 
   function handleToggle(shiftInstanceId: string) {
     if (locked) return;
@@ -64,7 +74,17 @@ export default function AvailabilityClient({
   function handleDesiredCountChange(value: number) {
     if (locked) return;
     setJustSubmitted(false);
-    setDesiredCount(value);
+    setDesiredCount(Math.max(0, value));
+  }
+
+  // Functional update, not handleDesiredCountChange(desiredCount + delta) —
+  // two clicks in quick succession (e.g. a fast double-tap) can both fire
+  // before React re-renders, so reading `desiredCount` from the closure
+  // would silently drop one of them.
+  function stepDesiredCount(delta: number) {
+    if (locked) return;
+    setJustSubmitted(false);
+    setDesiredCount((prev) => Math.max(0, prev + delta));
   }
 
   async function handleSubmit() {
@@ -129,7 +149,38 @@ export default function AvailabilityClient({
     setSavedDesiredCount(desiredCount);
   }
 
-  const dates = Array.from(new Set(instances.map((i) => i.date))).sort();
+  function renderShiftButton(instance: ShiftInstance) {
+    const isWanted = wanted[instance.id] === true;
+    return (
+      <button
+        key={instance.id}
+        type="button"
+        disabled={locked}
+        onClick={() => handleToggle(instance.id)}
+        className={`w-full rounded border px-2 py-1.5 text-right text-xs disabled:opacity-50 ${
+          isWanted ? "border-brand bg-brand-soft" : "border-border-soft bg-bg hover:border-brand"
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <span className="font-medium">{instance.shift_name}</span>
+          {isWanted && <span className="text-brand">✓</span>}
+        </div>
+        <div className="text-text-muted">
+          <bdi dir="ltr">
+            {instance.start_time.slice(0, 5)}–{instance.end_time.slice(0, 5)}
+          </bdi>
+        </div>
+      </button>
+    );
+  }
+
+  const submitStatusText = submitError
+    ? submitError
+    : isDirty
+      ? "יש שינויים שעדיין לא הוגשו"
+      : justSubmitted
+        ? "ההגשה נשמרה"
+        : "";
 
   return (
     <div>
@@ -150,17 +201,41 @@ export default function AvailabilityClient({
         <label className="mb-1 block text-sm font-semibold text-text">
           כמה משמרות תרצה/י לעבוד השבוע?
         </label>
+
+        {/* Desktop: plain number field */}
         <input
           type="number"
           min={0}
           disabled={locked}
           value={desiredCount}
           onChange={(e) => handleDesiredCountChange(Number(e.target.value))}
-          className="w-24 rounded border border-border px-3 py-2 tabular-nums disabled:bg-border-soft"
+          className="hidden w-24 rounded border border-border px-3 py-2 tabular-nums disabled:bg-border-soft md:block"
         />
+
+        {/* Mobile: +/- stepper, easier to tap than a numeric keyboard */}
+        <div className="flex items-center gap-3 md:hidden">
+          <button
+            type="button"
+            disabled={locked}
+            onClick={() => stepDesiredCount(1)}
+            className="flex h-9 w-9 items-center justify-center rounded border border-border text-lg font-semibold disabled:opacity-50"
+          >
+            +
+          </button>
+          <span className="min-w-[2ch] text-center text-xl font-bold tabular-nums">{desiredCount}</span>
+          <button
+            type="button"
+            disabled={locked}
+            onClick={() => stepDesiredCount(-1)}
+            className="flex h-9 w-9 items-center justify-center rounded border border-border text-lg font-semibold disabled:opacity-50"
+          >
+            −
+          </button>
+        </div>
       </div>
 
-      <div className="overflow-x-auto pb-2">
+      {/* Desktop: 7-column grid, all days always visible */}
+      <div className="hidden overflow-x-auto pb-2 md:block">
         <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
           {dates.map((date) => {
             const dayName = DAY_NAMES[new Date(`${date}T00:00:00Z`).getUTCDay()];
@@ -176,43 +251,56 @@ export default function AvailabilityClient({
                     <DateText date={date} />
                   </div>
                 </div>
-
-                <div className="space-y-1.5">
-                  {dayInstances.map((instance) => {
-                    const isWanted = wanted[instance.id] === true;
-                    return (
-                      <button
-                        key={instance.id}
-                        type="button"
-                        disabled={locked}
-                        onClick={() => handleToggle(instance.id)}
-                        className={`w-full rounded border px-2 py-1.5 text-right text-xs disabled:opacity-50 ${
-                          isWanted
-                            ? "border-brand bg-brand-soft"
-                            : "border-border-soft bg-bg hover:border-brand"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{instance.shift_name}</span>
-                          {isWanted && <span className="text-brand">✓</span>}
-                        </div>
-                        <div className="text-text-muted">
-                          <bdi dir="ltr">
-                            {instance.start_time.slice(0, 5)}–{instance.end_time.slice(0, 5)}
-                          </bdi>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                <div className="space-y-1.5">{dayInstances.map((instance) => renderShiftButton(instance))}</div>
               </div>
             );
           })}
         </div>
       </div>
 
+      {/* Mobile: per-day accordion */}
+      <div className="space-y-2 pb-4 md:hidden">
+        {dates.map((date) => {
+          const dayName = DAY_NAMES[new Date(`${date}T00:00:00Z`).getUTCDay()];
+          const dayInstances = instances
+            .filter((i) => i.date === date)
+            .sort((a, b) => a.start_time.localeCompare(b.start_time));
+          const selectedCount = dayInstances.filter((i) => wanted[i.id]).length;
+          const open = isDayOpen(date);
+
+          return (
+            <div key={date} className="overflow-hidden rounded border border-border bg-surface">
+              <button
+                type="button"
+                onClick={() => toggleDay(date)}
+                className="flex w-full items-center justify-between px-3 py-2.5"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">{dayName}</span>
+                  <span className="text-xs text-text-muted">
+                    <DateText date={date} />
+                  </span>
+                  {selectedCount > 0 && (
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-brand text-[10px] font-semibold text-white">
+                      {selectedCount}
+                    </span>
+                  )}
+                </span>
+                <span className={`text-text-muted transition-transform ${open ? "rotate-180" : ""}`}>﹀</span>
+              </button>
+              {open && (
+                <div className="space-y-1.5 border-t border-border-soft p-2">
+                  {dayInstances.map((instance) => renderShiftButton(instance))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop: inline submit bar */}
       {!locked && (
-        <div className="mt-4 flex items-center gap-3">
+        <div className="mt-4 hidden items-center gap-3 md:flex">
           <button
             onClick={handleSubmit}
             disabled={!isDirty || submitting}
@@ -220,15 +308,25 @@ export default function AvailabilityClient({
           >
             {submitting ? "שולח..." : "הגש"}
           </button>
-          <span className="text-xs text-text-muted">
-            {submitError
-              ? submitError
-              : isDirty
-                ? "יש שינויים שעדיין לא הוגשו"
-                : justSubmitted
-                  ? "ההגשה נשמרה"
-                  : ""}
-          </span>
+          <span className="text-xs text-text-muted">{submitStatusText}</span>
+        </div>
+      )}
+
+      {/* Mobile: sticky footer, always reachable without scrolling to the end */}
+      {!locked && (
+        <div className="sticky bottom-0 -mx-4 mt-4 flex items-center gap-3 border-t border-border bg-bg px-4 py-3 md:hidden">
+          <div className="flex-1 text-xs">
+            <div className="text-text-muted">סה&quot;כ נבחרו</div>
+            <div className="text-lg font-bold">{totalSelected} משמרות</div>
+            {submitStatusText && <div className="text-text-muted">{submitStatusText}</div>}
+          </div>
+          <button
+            onClick={handleSubmit}
+            disabled={!isDirty || submitting}
+            className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {submitting ? "שולח..." : "הגש"}
+          </button>
         </div>
       )}
     </div>
