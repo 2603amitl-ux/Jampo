@@ -22,7 +22,7 @@ export default function EmployeeNav() {
   }
 
   return (
-    <nav className="border-b border-border bg-surface">
+    <nav className="sticky top-0 z-20 border-b border-border bg-surface md:static">
       <div className="mx-auto flex h-16 max-w-screen-xl items-center gap-3 px-4">
         <span className="shrink-0 text-lg font-extrabold text-brand">ג&apos;אמפו</span>
         <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
