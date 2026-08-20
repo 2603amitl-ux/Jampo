@@ -157,7 +157,7 @@ export default function ScheduleSummaryTable({
                 </span>
               </div>
               {missed.length > 0 && (
-                <div className="mt-1.5 text-xs text-text-muted">החסיר/ה: {missedLabel(missed)}</div>
+                <div className="mt-1.5 text-xs text-text-muted">הגיש/ה ולא קיבל/ה: {missedLabel(missed)}</div>
               )}
             </button>
           );
