@@ -483,7 +483,7 @@ export default function PeriodDetailClient({
 
   return (
     <div>
-      <div className="sticky top-16 z-10 -mx-4 mb-4 border-b border-border bg-bg px-4 py-2 md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0">
+      <div className="mb-4">
       <div className="flex items-center gap-2 overflow-x-auto md:flex-wrap">
         <span className="shrink-0 whitespace-nowrap rounded bg-border-soft px-3 py-1 text-sm font-semibold text-text-muted">
           {PERIOD_STATUS_LABELS[status]}
