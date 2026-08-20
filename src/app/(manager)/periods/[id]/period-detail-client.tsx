@@ -483,8 +483,8 @@ export default function PeriodDetailClient({
 
   return (
     <div>
-      <div className="mb-4 flex flex-col flex-wrap items-stretch gap-2 md:flex-row md:items-center md:gap-3">
-        <span className="rounded bg-border-soft px-3 py-1 text-center text-sm font-semibold text-text-muted md:text-right">
+      <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 overflow-x-auto border-b border-border bg-bg px-4 py-2 md:static md:mx-0 md:flex-wrap md:border-0 md:bg-transparent md:px-0 md:py-0">
+        <span className="shrink-0 whitespace-nowrap rounded bg-border-soft px-3 py-1 text-sm font-semibold text-text-muted">
           {PERIOD_STATUS_LABELS[status]}
         </span>
 
@@ -492,7 +492,7 @@ export default function PeriodDetailClient({
           <button
             onClick={handleOpenCollecting}
             disabled={busy}
-            className="w-full rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50 md:w-auto"
+            className="shrink-0 whitespace-nowrap rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50"
           >
             פתיחה להגשת זמינות
           </button>
@@ -503,14 +503,14 @@ export default function PeriodDetailClient({
             <button
               onClick={handleNotify}
               disabled={busy}
-              className="w-full rounded bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand disabled:opacity-50 md:w-auto"
+              className="shrink-0 whitespace-nowrap rounded bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand disabled:opacity-50"
             >
               שליחת תזכורת לעובדים
             </button>
             <button
               onClick={handleBuildSchedule}
               disabled={busy}
-              className="w-full rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50 md:w-auto"
+              className="shrink-0 whitespace-nowrap rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50"
             >
               בניית הצעת שיבוץ
             </button>
@@ -522,21 +522,21 @@ export default function PeriodDetailClient({
             <button
               onClick={handleReopenForSubmission}
               disabled={busy}
-              className="w-full rounded bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand disabled:opacity-50 md:w-auto"
+              className="shrink-0 whitespace-nowrap rounded bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand disabled:opacity-50"
             >
               פתיחה מחדש להגשה
             </button>
             <button
               onClick={handleBuildSchedule}
               disabled={busy}
-              className="w-full rounded bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand disabled:opacity-50 md:w-auto"
+              className="shrink-0 whitespace-nowrap rounded bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand disabled:opacity-50"
             >
               בנה מחדש
             </button>
             <button
               onClick={handlePublish}
               disabled={busy}
-              className="w-full rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50 md:w-auto"
+              className="shrink-0 whitespace-nowrap rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50"
             >
               פרסום ללוח
             </button>

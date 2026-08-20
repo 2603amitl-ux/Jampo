@@ -51,11 +51,16 @@ export default function ScheduleSummaryTable({
     })
     .sort((a, b) => b.employee.priority - a.employee.priority);
 
+  const missedLabel = (missed: ShiftInstance[]) =>
+    missed.map((i) => `${DAY_NAMES[new Date(`${i.date}T00:00:00Z`).getUTCDay()]} ${i.shift_name}`).join(", ");
+
   return (
     <div className="mt-6">
       <h2 className="mb-2 text-lg font-bold">סיכום לפי עובד</h2>
       <p className="mb-2 text-xs text-text-muted">לחצ/י על שם עובד/ת כדי להבליט את המשמרות שלו/ה בלוח למעלה.</p>
-      <div className="overflow-x-auto rounded border border-border bg-surface">
+
+      {/* Desktop: full table */}
+      <div className="hidden overflow-x-auto rounded border border-border bg-surface md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-right text-text-muted">
@@ -70,35 +75,31 @@ export default function ScheduleSummaryTable({
             {rows.map(({ employee, submitted, desired, received, missed, underServed }) => {
               const isSelected = selectedEmployeeId === employee.id;
               return (
-              <tr
-                key={employee.id}
-                onClick={() => onSelectEmployee?.(employee.id)}
-                className={`cursor-pointer border-b border-border-soft last:border-0 ${
-                  isSelected ? "bg-brand-soft" : underServed ? "bg-amber-bg" : ""
-                }`}
-              >
-                <td className="px-4 py-3.5">
-                  {employee.full_name}
-                  {!isTrained(employee) && (
-                    <span className="mr-2 text-xs text-text-muted">(בהכשרה)</span>
-                  )}
-                  {underServed && (
-                    <span className="mr-2 rounded-full bg-amber px-2 py-0.5 text-xs font-semibold text-white">
-                      כדאי לפנות אליו/ה
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3.5 tabular-nums">{submitted}</td>
-                <td className="px-4 py-3.5 tabular-nums">{desired ?? "לא הגיש/ה"}</td>
-                <td className="px-4 py-3.5 tabular-nums">{received}</td>
-                <td className="px-4 py-3.5 text-text-muted">
-                  {missed.length === 0
-                    ? "—"
-                    : missed
-                        .map((i) => `${DAY_NAMES[new Date(`${i.date}T00:00:00Z`).getUTCDay()]} ${i.shift_name}`)
-                        .join(", ")}
-                </td>
-              </tr>
+                <tr
+                  key={employee.id}
+                  onClick={() => onSelectEmployee?.(employee.id)}
+                  className={`cursor-pointer border-b border-border-soft last:border-0 ${
+                    isSelected ? "bg-brand-soft" : underServed ? "bg-amber-bg" : ""
+                  }`}
+                >
+                  <td className="px-4 py-3.5">
+                    {employee.full_name}
+                    {!isTrained(employee) && (
+                      <span className="mr-2 text-xs text-text-muted">(בהכשרה)</span>
+                    )}
+                    {underServed && (
+                      <span className="mr-2 rounded-full bg-amber px-2 py-0.5 text-xs font-semibold text-white">
+                        כדאי לפנות אליו/ה
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3.5 tabular-nums">{submitted}</td>
+                  <td className="px-4 py-3.5 tabular-nums">{desired ?? "לא הגיש/ה"}</td>
+                  <td className="px-4 py-3.5 tabular-nums">{received}</td>
+                  <td className="px-4 py-3.5 text-text-muted">
+                    {missed.length === 0 ? "—" : missedLabel(missed)}
+                  </td>
+                </tr>
               );
             })}
             {rows.length === 0 && (
@@ -110,6 +111,62 @@ export default function ScheduleSummaryTable({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile: one full-width card per employee — a 5-column table can't
+          fit a phone screen without horizontal scrolling, so the same data
+          is laid out vertically instead. */}
+      <div className="space-y-2 md:hidden">
+        {rows.map(({ employee, submitted, desired, received, missed, underServed }) => {
+          const isSelected = selectedEmployeeId === employee.id;
+          return (
+            <button
+              key={employee.id}
+              type="button"
+              onClick={() => onSelectEmployee?.(employee.id)}
+              className={`w-full rounded border p-3 text-right ${
+                isSelected
+                  ? "border-brand bg-brand-soft"
+                  : underServed
+                    ? "border-amber-bg bg-amber-bg"
+                    : "border-border bg-surface"
+              }`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <span className="font-semibold">
+                  {employee.full_name}
+                  {!isTrained(employee) && (
+                    <span className="mr-1.5 text-xs font-normal text-text-muted">(בהכשרה)</span>
+                  )}
+                </span>
+                {underServed && (
+                  <span className="rounded-full bg-amber px-2 py-0.5 text-xs font-semibold text-white">
+                    כדאי לפנות אליו/ה
+                  </span>
+                )}
+              </div>
+              <div className="mt-1.5 flex gap-4 text-xs text-text-muted">
+                <span>
+                  הגיש/ה <span className="font-semibold text-text tabular-nums">{submitted}</span>
+                </span>
+                <span>
+                  ביקש/ה <span className="font-semibold text-text tabular-nums">{desired ?? "—"}</span>
+                </span>
+                <span>
+                  קיבל/ה <span className="font-semibold text-text tabular-nums">{received}</span>
+                </span>
+              </div>
+              {missed.length > 0 && (
+                <div className="mt-1.5 text-xs text-text-muted">החסיר/ה: {missedLabel(missed)}</div>
+              )}
+            </button>
+          );
+        })}
+        {rows.length === 0 && (
+          <p className="rounded border border-border bg-surface px-4 py-8 text-center text-text-muted">
+            אין עובדים פעילים
+          </p>
+        )}
       </div>
     </div>
   );
