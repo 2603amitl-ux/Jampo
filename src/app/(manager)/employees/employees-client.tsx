@@ -8,9 +8,11 @@ import EmployeeForm, { type EmployeeFormValues } from "./employee-form";
 export default function EmployeesClient({
   initialEmployees,
   certifications,
+  currentUserId,
 }: {
   initialEmployees: Employee[];
   certifications: string[];
+  currentUserId: string;
 }) {
   const [employees, setEmployees] = useState(initialEmployees);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -105,6 +107,16 @@ export default function EmployeesClient({
     setEmployees((prev) => prev.filter((emp) => emp.id !== employee.id));
   }
 
+  const managerCount = employees.filter((e) => e.role === "manager").length;
+  // Mirrors the server-side guards in the DELETE route — hiding the button
+  // here isn't itself the safety check, just avoids showing an action that
+  // would always fail with an error.
+  function canDelete(employee: Employee): boolean {
+    if (employee.id === currentUserId) return false;
+    if (employee.role === "manager" && managerCount <= 1) return false;
+    return true;
+  }
+
   return (
     <div>
       {!showAddForm && (
@@ -191,12 +203,14 @@ export default function EmployeesClient({
                       >
                         {employee.active ? "השבתה" : "הפעלה"}
                       </button>
-                      <button
-                        onClick={() => handleDelete(employee)}
-                        className="text-danger"
-                      >
-                        מחיקה
-                      </button>
+                      {canDelete(employee) && (
+                        <button
+                          onClick={() => handleDelete(employee)}
+                          className="text-danger"
+                        >
+                          מחיקה
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

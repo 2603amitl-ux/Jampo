@@ -3,6 +3,10 @@ import EmployeesClient from "./employees-client";
 
 export default async function EmployeesPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const { data: employees } = await supabase
     .from("employees")
     .select("*")
@@ -20,6 +24,7 @@ export default async function EmployeesPage() {
       <EmployeesClient
         initialEmployees={employees ?? []}
         certifications={(certifications ?? []).map((c) => c.name)}
+        currentUserId={user!.id}
       />
     </div>
   );
