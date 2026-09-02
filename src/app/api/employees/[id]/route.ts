@@ -64,3 +64,51 @@ export async function PATCH(
 
   return NextResponse.json({ ok: true });
 }
+
+// Permanent delete — distinct from the "active" toggle above. Deleting the
+// auth user cascades (employees, availability, weekly_shift_requests,
+// assignments, employee_unavailability all reference employees.id with ON
+// DELETE CASCADE), including any historical assignments in already-published
+// periods. The client warns about this before ever calling here.
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const manager = await requireManager();
+  if (!manager) {
+    return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
+  }
+  const { id } = await params;
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "מזהה עובד לא תקין" }, { status: 400 });
+  }
+  if (id === manager.id) {
+    return NextResponse.json(
+      { error: "אי אפשר למחוק את המשתמש שדרכו נכנסת כרגע" },
+      { status: 400 }
+    );
+  }
+
+  const admin = createAdminClient();
+
+  const { data: target } = await admin.from("employees").select("role").eq("id", id).single();
+  if (target?.role === "manager") {
+    const { count } = await admin
+      .from("employees")
+      .select("id", { count: "exact", head: true })
+      .eq("role", "manager");
+    if ((count ?? 0) <= 1) {
+      return NextResponse.json(
+        { error: "אי אפשר למחוק את המנהל/ת האחרון/ה במערכת" },
+        { status: 400 }
+      );
+    }
+  }
+
+  const { error } = await admin.auth.admin.deleteUser(id);
+  if (error) {
+    return NextResponse.json({ error: "שגיאה במחיקת העובד" }, { status: 400 });
+  }
+
+  return NextResponse.json({ ok: true });
+}

@@ -88,6 +88,23 @@ export default function EmployeesClient({
     );
   }
 
+  async function handleDelete(employee: Employee) {
+    const confirmed = confirm(
+      `למחוק לצמיתות את ${employee.full_name}?\n\n` +
+        "הפעולה בלתי הפיכה — כל היסטוריית השיבוצים, הזמינות וההודעות שלו/ה תימחק גם היא, כולל ממחזורים שכבר פורסמו.\n\n" +
+        'אם רק רוצים להוציא אותו/ה משימוש בלי לאבד היסטוריה — עדיף "השבתה" ולא מחיקה.'
+    );
+    if (!confirmed) return;
+
+    const res = await fetch(`/api/employees/${employee.id}`, { method: "DELETE" });
+    const body = await res.json();
+    if (!res.ok) {
+      alert(body.error ?? "שגיאה במחיקת העובד");
+      return;
+    }
+    setEmployees((prev) => prev.filter((emp) => emp.id !== employee.id));
+  }
+
   return (
     <div>
       {!showAddForm && (
@@ -173,6 +190,12 @@ export default function EmployeesClient({
                         className="text-text-muted"
                       >
                         {employee.active ? "השבתה" : "הפעלה"}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(employee)}
+                        className="text-danger"
+                      >
+                        מחיקה
                       </button>
                     </div>
                   </td>
